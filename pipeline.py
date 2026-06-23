@@ -1,12 +1,9 @@
 import time
 from logger import logger
 from api import fetch_crypto
-from db import save_to_db
 from validation import validate_data
-
-
-from config import engine
 from db import save_to_db
+from config import engine
 
 
 def run_pipeline():
