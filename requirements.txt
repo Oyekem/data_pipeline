@@ -1,6 +1,6 @@
 requests
 pandas
 psycopg2-binary
-sqlachemy
+sqlalchemy
 python-dotenv
 streamlit
