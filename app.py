@@ -1,7 +1,4 @@
 import streamlit as st
-from streamlit_autorefresh import st_autorefresh
-
-st.autorefresh(interval=30 * 1000, key="datarefresh")
 
 st.set_page_config(
     page_title="Crypto Analytics Platform",
