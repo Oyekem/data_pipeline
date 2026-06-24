@@ -14,9 +14,10 @@ def save_to_db(engine, data):
 
     try:
         with engine.begin() as conn:
-            conn.execute(query, data)
+            conn.execute(query, data)  # list of dicts is OK in SQLAlchemy 2.0+
 
-        logger.info(f"DB upsert successful: {len(data)} records")
+        logger.info(f"DB insert successful: {len(data)} records")
 
     except Exception as e:
         logger.error(f"DB insert failed: {e}")
+        raise
