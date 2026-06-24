@@ -9,7 +9,7 @@ def save_to_db(engine, data):
     query = text("""
         INSERT INTO crypto_prices (coin, price, market_cap)
         VALUES (:coin, :price, :market_cap)
-        ON CONFLICT (coin, created_at) DO NOTHING
+        ON CONFLICT DO NOTHING
     """)
 
     try:
