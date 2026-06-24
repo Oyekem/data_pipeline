@@ -168,19 +168,56 @@ col2.metric(
 
 st.write(f"Confidence Range: {lower:.2f} - {upper:.2f}")
 
-
 # -------------------------
-# MULTI-COIN COMPARISON
+# MULTI-COIN COMPARISON (USER SELECTABLE)
 # -------------------------
 st.subheader("Multi-Coin Comparison")
 
-pivot = df.pivot_table(
+# Get available coins
+all_coins = df["coin"].dropna().unique()
+
+# User selects coins
+selected_coins = st.multiselect(
+    "Select coins to compare",
+    options=all_coins,
+    default=list(all_coins[:2])
+)
+
+# Safety check
+if not selected_coins:
+    st.warning("Please select at least one coin to compare")
+    st.stop()
+
+# Filter data
+compare_df = df[df["coin"].isin(selected_coins)].copy()
+
+# Ensure time order
+compare_df["created_at"] = pd.to_datetime(compare_df["created_at"])
+compare_df = compare_df.sort_values("created_at")
+
+# Pivot
+pivot = compare_df.pivot_table(
     index="created_at",
     columns="coin",
     values="price"
 )
 
-st.line_chart(pivot)
+# Clean missing values
+pivot = pivot.dropna(how="all")
+
+# -------------------------
+# NORMALIZATION (SAFE VERSION)
+# -------------------------
+# Avoid crash if first row has NaN
+pivot_clean = pivot.dropna()
+
+if not pivot_clean.empty:
+    normalized = pivot_clean / pivot_clean.iloc[0] * 100
+
+    st.caption("Normalized performance (starting at 100)")
+    st.line_chart(normalized)
+else:
+    st.warning("Not enough data to normalize comparison")
 
 
 # -------------------------
