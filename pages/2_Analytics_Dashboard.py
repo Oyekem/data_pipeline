@@ -2,7 +2,15 @@ import streamlit as st
 import pandas as pd
 from config import engine
 
+# -------------------------
+# AUTO REFRESH (REAL-TIME FEEL)
+# -------------------------
+st.write("🔄 Live Dashboard (refreshing every 30s)")
+st.rerun()
+
+
 st.title("Crypto Analytics Dashboard")
+
 
 # -------------------------
 # LOAD DATA
@@ -10,10 +18,10 @@ st.title("Crypto Analytics Dashboard")
 @st.cache_data(ttl=30)
 def load_data():
     query = "SELECT * FROM crypto_prices ORDER BY created_at DESC"
-    df = pd.read_sql(query, engine)
-    return df
+    return pd.read_sql(query, engine)
 
 df = load_data()
+
 
 # -------------------------
 # SAFETY CHECK
@@ -24,14 +32,14 @@ if df.empty:
 
 
 # -------------------------
-# BASIC CLEANING
+# CLEANING
 # -------------------------
 df["created_at"] = pd.to_datetime(df["created_at"])
 df["price"] = pd.to_numeric(df["price"], errors="coerce")
 
 
 # -------------------------
-# METRICS SECTION
+# GLOBAL METRICS
 # -------------------------
 latest_time = df["created_at"].max()
 
@@ -41,29 +49,120 @@ col1.metric("Total Records", len(df))
 col2.metric("Latest Update", latest_time.strftime("%Y-%m-%d %H:%M:%S"))
 col3.metric("Coins Tracked", df["coin"].nunique())
 
-# -------------------------
-# FILTER BITCOIN
-# -------------------------
-btc = df[df["coin"].str.lower() == "bitcoin"].sort_values("created_at")
 
-st.subheader("Bitcoin Price Trend")
+# -------------------------
+# COIN SELECTOR
+# -------------------------
+coins = df["coin"].dropna().unique()
+selected_coin = st.selectbox("Select Coin", coins)
+
+
+# -------------------------
+# FILTER DATA
+# -------------------------
+coin_df = df[df["coin"] == selected_coin].copy()
+coin_df = coin_df.sort_values("created_at")
+
+
+# -------------------------
+# BASIC CHART (PRICE)
+# -------------------------
+st.subheader(f"{selected_coin} Price Trend")
 
 st.line_chart(
-    btc.set_index("created_at")["price"]
+    coin_df.set_index("created_at")["price"]
 )
+
+
+# -------------------------
+# MOVING AVERAGE (7)
+# -------------------------
+coin_df["ma7"] = coin_df["price"].rolling(window=7).mean()
+
+st.subheader("Moving Average (7-period)")
+
+st.line_chart(
+    coin_df.set_index("created_at")[["price", "ma7"]]
+)
+
+
+# -------------------------
+# EMA (EXPONENTIAL MOVING AVG)
+# -------------------------
+coin_df["ema"] = coin_df["price"].ewm(span=7).mean()
+
+
+# -------------------------
+# VOLATILITY
+# -------------------------
+coin_df["returns"] = coin_df["price"].pct_change()
+volatility = coin_df["returns"].std()
+
+
+# -------------------------
+# MARKET HEAT
+# -------------------------
+if volatility < 0.01:
+    heat = "🟢 Low"
+elif volatility < 0.03:
+    heat = "🟡 Medium"
+else:
+    heat = "🔴 High"
+
+
+# -------------------------
+# KPIs (TRADING STYLE UI)
+# -------------------------
+st.subheader("📊 Market Overview")
+
+last_price = coin_df["price"].iloc[-1]
+
+col1, col2, col3 = st.columns(3)
+
+col1.metric("Price", round(last_price, 2))
+col2.metric("Volatility", round(volatility, 6))
+col3.metric("Market Heat", heat)
+
+
+# -------------------------
+# PREDICTION (ROLLING + EMA + RANGE)
+# -------------------------
+coin_df["rolling_mean"] = coin_df["price"].rolling(window=5).mean()
+
+pred_rolling = coin_df["rolling_mean"].iloc[-1]
+pred_ema = coin_df["ema"].iloc[-1]
+
+std = coin_df["price"].std()
+upper = last_price + std
+lower = last_price - std
+
+
+st.subheader("📈 Prediction Models")
+
+col1, col2 = st.columns(2)
+
+col1.metric("Rolling Forecast", round(pred_rolling, 2))
+col2.metric("EMA Forecast", round(pred_ema, 2))
+
+st.write(f"📊 Confidence Range: {lower:.2f} - {upper:.2f}")
+
+
+# -------------------------
+# MULTI-COIN COMPARISON
+# -------------------------
+st.subheader("Multi-Coin Comparison")
+
+pivot = df.pivot_table(
+    index="created_at",
+    columns="coin",
+    values="price"
+)
+
+st.line_chart(pivot)
+
 
 # -------------------------
 # PIPELINE HEALTH
-# -------------------------
-st.subheader("Pipeline Health")
-
-if len(df) > 0:
-    st.success("Pipeline is running and receiving data")
-else:
-    st.error("No data detected")
-
-# -------------------------
-# PIPELINE HEALTH MONITOR
 # -------------------------
 st.subheader("⚙️ Pipeline Health Monitor")
 
@@ -75,24 +174,22 @@ LIMIT 10
 
 logs = pd.read_sql(log_query, engine)
 
-st.dataframe(logs)
-
 if logs.empty:
     st.warning("No pipeline logs yet")
-    st.stop()
+else:
+    st.dataframe(logs)
 
-latest = logs.iloc[0]
+    latest = logs.iloc[0]
 
-col1, col2, col3 = st.columns(3)
+    col1, col2, col3 = st.columns(3)
 
-col1.metric("Last Status", latest["status"])
-col2.metric("Last Runtime (s)", round(latest["runtime_seconds"], 2))
-col3.metric("Last Run Time", latest["run_time"])
-
+    col1.metric("Last Status", latest["status"])
+    col2.metric("Last Runtime (s)", round(latest["runtime_seconds"], 2))
+    col3.metric("Last Run Time", latest["run_time"])
 
 
 # -------------------------
-# RAW DATA TABLE
+# RAW DATA
 # -------------------------
 st.subheader("📋 Latest Data")
 
