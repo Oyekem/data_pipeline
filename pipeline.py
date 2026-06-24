@@ -1,23 +1,22 @@
 import time
+import os
 from logger import logger
 from api import fetch_crypto
-from validation import validate_data
 from db import save_to_db
+from validation import validate_data
 from config import engine
+
+LOCK_FILE = "pipeline.lock"
 
 
 def run_pipeline():
+
     start = time.time()
     logger.info("Pipeline started")
 
     try:
-        # STEP 1: Fetch data
         raw_data = fetch_crypto()
-
-        # STEP 2: Validate data
         clean_data = validate_data(raw_data)
-
-        # STEP 3: Save to DB
         save_to_db(engine, clean_data)
 
         logger.info("Pipeline completed successfully")
@@ -30,5 +29,24 @@ def run_pipeline():
         logger.info(f"Pipeline runtime: {duration:.2f}s")
 
 
+# -------------------------
+# LOCK WRAPPER (IMPORTANT)
+# -------------------------
+
 if __name__ == "__main__":
-    run_pipeline()
+
+    # 1. Check if already running
+    if os.path.exists(LOCK_FILE):
+        logger.warning("Pipeline already running. Exiting.")
+        exit()
+
+    # 2. Create lock file
+    open(LOCK_FILE, "w").close()
+
+    try:
+        run_pipeline()
+
+    finally:
+        # 3. Always remove lock
+        if os.path.exists(LOCK_FILE):
+            os.remove(LOCK_FILE)
