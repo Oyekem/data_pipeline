@@ -2,8 +2,10 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from config import engine
+from sklearn.ensemble import RandomForestRegressor
 
 st.title("Price Prediction (Next 5 Minutes)")
+
 
 # -----------------------
 # LOAD DATA
@@ -15,49 +17,143 @@ def load_data():
 
 df = load_data()
 
+
 # -----------------------
 # FILTER BITCOIN (SAFE)
 # -----------------------
 btc = df[df["coin"].str.lower() == "bitcoin"].copy()
 
-# -----------------------
-# SAFETY CHECK (IMPORTANT)
-# -----------------------
 if btc.empty:
     st.warning("No Bitcoin data available yet.")
     st.stop()
 
 btc = btc.sort_values("created_at")
 
-# -----------------------
-# SIMPLE FORECAST MODEL
-# -----------------------
-btc["price_change"] = btc["price"].diff()
 
+# =========================================================
+# MODEL 1: SIMPLE STATISTICAL MODEL
+# =========================================================
+st.subheader("Baseline Model (Simple Trend)")
+
+btc["price_change"] = btc["price"].diff()
 avg_change = btc["price_change"].mean()
 
-last_price = btc["price"].iloc[-1]
-
-# fallback safety if NaN
 if np.isnan(avg_change):
     avg_change = 0
 
-predicted_price = last_price + avg_change
+last_price = btc["price"].iloc[-1]
+simple_pred = last_price + avg_change
+
+col1, col2 = st.columns(2)
+
+col1.metric("Current Price", round(last_price, 2))
+col2.metric("Simple Prediction", round(simple_pred, 2))
+
+
+# =========================================================
+# MODEL 2: MACHINE LEARNING MODEL
+# =========================================================
+st.subheader("ML Model (Random Forest Forecast)")
+
 
 # -----------------------
-# OUTPUT
+# FEATURE ENGINEERING
 # -----------------------
-st.subheader("Prediction Result")
+ml_df = btc.copy()
 
-st.metric("Current Price", round(last_price, 2))
-st.metric("Predicted Price (5 min)", round(predicted_price, 2))
+ml_df["lag1"] = ml_df["price"].shift(1)
+ml_df["lag2"] = ml_df["price"].shift(2)
+ml_df["lag3"] = ml_df["price"].shift(3)
 
-st.write("""
-This is a simple statistical forecast using average price movement.
+ml_df["ma5"] = ml_df["price"].rolling(5).mean()
+ml_df["std5"] = ml_df["price"].rolling(5).std()
 
-Later upgrades:
-- Moving Average Model
-- Prophet forecasting
-- LSTM neural network
-- Real-time streaming prediction
-""")
+ml_df = ml_df.dropna()
+
+
+# -----------------------
+# TRAIN MODEL
+# -----------------------
+X = ml_df[["lag1", "lag2", "lag3", "ma5", "std5"]]
+y = ml_df["price"]
+
+model = RandomForestRegressor(n_estimators=100, random_state=42)
+model.fit(X, y)
+
+
+# -----------------------
+# PREDICT
+# -----------------------
+latest = ml_df.iloc[-1]
+
+input_data = np.array([[
+    latest["lag1"],
+    latest["lag2"],
+    latest["lag3"],
+    latest["ma5"],
+    latest["std5"]
+]])
+
+ml_pred = model.predict(input_data)[0]
+
+
+col1, col2 = st.columns(2)
+
+col1.metric("ML Prediction", round(ml_pred, 2))
+col2.metric("Model Type", "Random Forest")
+
+
+# =========================================================
+# SIGNAL ENGINE (COMBINED)
+# =========================================================
+st.subheader("Trading Signal Engine")
+
+diff = ml_pred - last_price
+pct = diff / last_price
+
+if pct > 0.01:
+    signal = "🟢 BUY"
+elif pct < -0.01:
+    signal = "🔴 SELL"
+else:
+    signal = "🟡 HOLD"
+
+st.metric("Signal", signal)
+
+
+# =========================================================
+# CONFIDENCE RANGE
+# =========================================================
+volatility = btc["price"].pct_change().std()
+
+upper = ml_pred * (1 + volatility)
+lower = ml_pred * (1 - volatility)
+
+st.write(f"Confidence Range: {lower:.2f} - {upper:.2f}")
+
+
+# =========================================================
+# MODEL COMPARISON
+# =========================================================
+st.subheader("Model Comparison")
+
+compare_df = pd.DataFrame({
+    "Model": ["Simple Average", "ML Model"],
+    "Prediction": [simple_pred, ml_pred]
+})
+
+st.dataframe(compare_df)
+
+
+# =========================================================
+# QUICK INSIGHT
+# =========================================================
+st.subheader("Insight")
+
+if ml_pred > simple_pred:
+    st.success("ML model is more bullish than baseline model")
+else:
+    st.warning("ML model is more conservative than baseline")
+
+
+st.caption(f"Last updated: {btc['created_at'].max()}")
