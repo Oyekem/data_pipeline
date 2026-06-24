@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from config import engine
 
-st.title("🔮 Price Prediction (Next 5 Minutes)")
+st.title("Price Prediction (Next 5 Minutes)")
 
 @st.cache_data(ttl=30)
 def load_data():
@@ -27,13 +27,13 @@ last_price = btc["price"].iloc[-1]
 
 predicted_price = last_price + avg_change
 
-st.subheader("📊 Prediction Result")
+st.subheader("Prediction Result")
 
 st.metric("Current Price", round(last_price, 2))
 st.metric("Predicted Price (5 min)", round(predicted_price, 2))
 
 st.write("""
-⚠️ This is a simple statistical forecast using average price movement.
+This is a simple statistical forecast using average price movement.
 Later we can upgrade this to:
 - LSTM model
 - Prophet forecasting
