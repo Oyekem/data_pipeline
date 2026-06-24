@@ -3,12 +3,16 @@ import pandas as pd
 from config import engine
 
 # -------------------------
-# AUTO REFRESH (REAL-TIME FEEL)
+# AUTO REFRESH (SAFE)
 # -------------------------
-st.write("🔄 Live Dashboard (refreshing every 30s)")
-st.rerun()
+from streamlit_autorefresh import st_autorefresh
+
+st_autorefresh(interval=30000, key="refresh")
 
 
+# -------------------------
+# TITLE
+# -------------------------
 st.title("Crypto Analytics Dashboard")
 
 
@@ -65,7 +69,15 @@ coin_df = coin_df.sort_values("created_at")
 
 
 # -------------------------
-# BASIC CHART (PRICE)
+# SAFETY FOR EMPTY COIN DATA
+# -------------------------
+if coin_df.empty:
+    st.warning("No data for selected coin")
+    st.stop()
+
+
+# -------------------------
+# PRICE CHART
 # -------------------------
 st.subheader(f"{selected_coin} Price Trend")
 
@@ -75,7 +87,7 @@ st.line_chart(
 
 
 # -------------------------
-# MOVING AVERAGE (7)
+# MOVING AVERAGE
 # -------------------------
 coin_df["ma7"] = coin_df["price"].rolling(window=7).mean()
 
@@ -87,7 +99,7 @@ st.line_chart(
 
 
 # -------------------------
-# EMA (EXPONENTIAL MOVING AVG)
+# EMA
 # -------------------------
 coin_df["ema"] = coin_df["price"].ewm(span=7).mean()
 
@@ -102,30 +114,32 @@ volatility = coin_df["returns"].std()
 # -------------------------
 # MARKET HEAT
 # -------------------------
-if volatility < 0.01:
-    heat = "🟢 Low"
+if pd.isna(volatility):
+    heat = "N/A"
+elif volatility < 0.01:
+    heat = "Low"
 elif volatility < 0.03:
-    heat = "🟡 Medium"
+    heat = "Medium"
 else:
-    heat = "🔴 High"
+    heat = "High"
 
 
 # -------------------------
-# KPIs (TRADING STYLE UI)
+# MARKET OVERVIEW
 # -------------------------
-st.subheader("📊 Market Overview")
+st.subheader("Market Overview")
 
 last_price = coin_df["price"].iloc[-1]
 
 col1, col2, col3 = st.columns(3)
 
 col1.metric("Price", round(last_price, 2))
-col2.metric("Volatility", round(volatility, 6))
+col2.metric("Volatility", round(volatility, 6) if not pd.isna(volatility) else 0)
 col3.metric("Market Heat", heat)
 
 
 # -------------------------
-# PREDICTION (ROLLING + EMA + RANGE)
+# PREDICTION MODELS
 # -------------------------
 coin_df["rolling_mean"] = coin_df["price"].rolling(window=5).mean()
 
@@ -133,18 +147,26 @@ pred_rolling = coin_df["rolling_mean"].iloc[-1]
 pred_ema = coin_df["ema"].iloc[-1]
 
 std = coin_df["price"].std()
-upper = last_price + std
-lower = last_price - std
+
+upper = last_price + std if not pd.isna(std) else last_price
+lower = last_price - std if not pd.isna(std) else last_price
 
 
-st.subheader("📈 Prediction Models")
+st.subheader("Prediction Models")
 
 col1, col2 = st.columns(2)
 
-col1.metric("Rolling Forecast", round(pred_rolling, 2))
-col2.metric("EMA Forecast", round(pred_ema, 2))
+col1.metric(
+    "Rolling Forecast",
+    round(pred_rolling, 2) if not pd.isna(pred_rolling) else "N/A"
+)
 
-st.write(f"📊 Confidence Range: {lower:.2f} - {upper:.2f}")
+col2.metric(
+    "EMA Forecast",
+    round(pred_ema, 2)
+)
+
+st.write(f"Confidence Range: {lower:.2f} - {upper:.2f}")
 
 
 # -------------------------
@@ -164,7 +186,7 @@ st.line_chart(pivot)
 # -------------------------
 # PIPELINE HEALTH
 # -------------------------
-st.subheader("⚙️ Pipeline Health Monitor")
+st.subheader("Pipeline Health Monitor")
 
 log_query = """
 SELECT * FROM pipeline_runs
@@ -191,6 +213,6 @@ else:
 # -------------------------
 # RAW DATA
 # -------------------------
-st.subheader("📋 Latest Data")
+st.subheader("Latest Data")
 
 st.dataframe(df.head(20))
