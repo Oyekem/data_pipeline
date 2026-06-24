@@ -1,14 +1,16 @@
 import streamlit as st
+import joblib
 import pandas as pd
 import numpy as np
 from config import engine
 from sklearn.ensemble import RandomForestRegressor
+from ml_model import create_features, train_model, predict_next
 
 st.title("Price Prediction (Next 5 Minutes)")
 
 
 # -----------------------
-# LOAD DATA
+# LOAD DATA + FILTER
 # -----------------------
 @st.cache_data(ttl=30)
 def load_data():
@@ -17,10 +19,6 @@ def load_data():
 
 df = load_data()
 
-
-# -----------------------
-# FILTER BITCOIN (SAFE)
-# -----------------------
 btc = df[df["coin"].str.lower() == "bitcoin"].copy()
 
 if btc.empty:
@@ -33,7 +31,7 @@ btc = btc.sort_values("created_at")
 # =========================================================
 # MODEL 1: SIMPLE STATISTICAL MODEL
 # =========================================================
-st.subheader("Baseline Model (Simple Trend)")
+st.subheader("Baseline Model")
 
 btc["price_change"] = btc["price"].diff()
 avg_change = btc["price_change"].mean()
@@ -45,7 +43,6 @@ last_price = btc["price"].iloc[-1]
 simple_pred = last_price + avg_change
 
 col1, col2 = st.columns(2)
-
 col1.metric("Current Price", round(last_price, 2))
 col2.metric("Simple Prediction", round(simple_pred, 2))
 
@@ -53,7 +50,14 @@ col2.metric("Simple Prediction", round(simple_pred, 2))
 # =========================================================
 # MODEL 2: MACHINE LEARNING MODEL
 # =========================================================
-st.subheader("ML Model (Random Forest Forecast)")
+st.subheader("ML Model (Production Version)")
+
+model = train_model(btc)
+ml_pred = predict_next(model, btc)
+
+col1, col2 = st.columns(2)
+col1.metric("ML Prediction", round(ml_pred, 2))
+col2.metric("Model", "Random Forest"
 
 
 # -----------------------
@@ -70,15 +74,7 @@ ml_df["std5"] = ml_df["price"].rolling(5).std()
 
 ml_df = ml_df.dropna()
 
-
-# -----------------------
-# TRAIN MODEL
-# -----------------------
-X = ml_df[["lag1", "lag2", "lag3", "ma5", "std5"]]
-y = ml_df["price"]
-
-model = RandomForestRegressor(n_estimators=100, random_state=42)
-model.fit(X, y)
+model = joblib.load("models/rf_model.pkl")
 
 
 # -----------------------
@@ -106,18 +102,20 @@ col2.metric("Model Type", "Random Forest")
 # =========================================================
 # SIGNAL ENGINE (COMBINED)
 # =========================================================
+def generate_signal(current_price, predicted_price):
+    diff = predicted_price - current_price
+
+    if diff > current_price * 0.002:
+        return "🟢 BUY"
+    elif diff < -current_price * 0.002:
+        return "🔴 SELL"
+    else:
+        return "🟡 HOLD"
+
+
+signal = generate_signal(last_price, ml_pred)
+
 st.subheader("Trading Signal Engine")
-
-diff = ml_pred - last_price
-pct = diff / last_price
-
-if pct > 0.01:
-    signal = "🟢 BUY"
-elif pct < -0.01:
-    signal = "🔴 SELL"
-else:
-    signal = "🟡 HOLD"
-
 st.metric("Signal", signal)
 
 
@@ -131,18 +129,31 @@ lower = ml_pred * (1 - volatility)
 
 st.write(f"Confidence Range: {lower:.2f} - {upper:.2f}")
 
-
 # =========================================================
 # MODEL COMPARISON
 # =========================================================
 st.subheader("Model Comparison")
 
 compare_df = pd.DataFrame({
-    "Model": ["Simple Average", "ML Model"],
+    "Model": ["Simple", "ML"],
     "Prediction": [simple_pred, ml_pred]
 })
 
 st.dataframe(compare_df)
+
+
+# =========================================================
+# BACKTEST DISPLAY
+# =========================================================
+from ml_model import backtest
+
+mae, rmse = backtest(model, btc)
+
+st.subheader("Model Performance")
+
+col1, col2 = st.columns(2)
+col1.metric("MAE", round(mae, 4))
+col2.metric("RMSE", round(rmse, 4))
 
 
 # =========================================================
