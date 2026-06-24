@@ -1,19 +1,19 @@
 import streamlit as st
 import pandas as pd
-from config import engine
+import numpy as np
 
-# -------------------------
-# AUTO REFRESH (SAFE)
-# -------------------------
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+
+from config import engine
 from streamlit_autorefresh import st_autorefresh
 
+# -------------------------
+# LIVE REFRESH
+# -------------------------
 st_autorefresh(interval=30000, key="refresh")
 
-
-# -------------------------
-# TITLE
-# -------------------------
-st.title("Crypto Analytics Dashboard")
+st.title("📊 Crypto Trading Intelligence System")
 
 
 # -------------------------
@@ -24,232 +24,154 @@ def load_data():
     query = "SELECT * FROM crypto_prices ORDER BY created_at DESC"
     return pd.read_sql(query, engine)
 
+
+@st.cache_data(ttl=30)
+def load_logs():
+    return pd.read_sql("SELECT * FROM pipeline_runs ORDER BY run_time DESC", engine)
+
+
 df = load_data()
+logs = load_logs()
 
 
-# -------------------------
-# SAFETY CHECK
-# -------------------------
 if df.empty:
-    st.warning("No data available yet. Waiting for pipeline...")
+    st.warning("No data yet")
     st.stop()
 
 
-# -------------------------
-# CLEANING
-# -------------------------
 df["created_at"] = pd.to_datetime(df["created_at"])
 df["price"] = pd.to_numeric(df["price"], errors="coerce")
 
 
 # -------------------------
-# GLOBAL METRICS
+# PIPELINE HEALTH
 # -------------------------
-latest_time = df["created_at"].max()
+st.subheader("⚙️ Pipeline Health")
 
-col1, col2, col3 = st.columns(3)
+if not logs.empty:
+    latest_log = logs.iloc[0]
 
-col1.metric("Total Records", len(df))
-col2.metric("Latest Update", latest_time.strftime("%Y-%m-%d %H:%M:%S"))
-col3.metric("Coins Tracked", df["coin"].nunique())
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Status", latest_log["status"])
+    col2.metric("Runtime", round(latest_log["runtime_seconds"], 2))
+    col3.metric("Runs", len(logs))
+
+
+    success_rate = (logs["status"] == "success").mean() * 100
+    st.metric("Success Rate", f"{success_rate:.2f}%")
+else:
+    st.warning("No logs yet")
 
 
 # -------------------------
 # COIN SELECTOR
 # -------------------------
-coins = df["coin"].dropna().unique()
+coins = df["coin"].unique()
 selected_coin = st.selectbox("Select Coin", coins)
 
+coin_df = df[df["coin"] == selected_coin].sort_values("created_at")
 
-# -------------------------
-# FILTER DATA
-# -------------------------
-coin_df = df[df["coin"] == selected_coin].copy()
-coin_df = coin_df.sort_values("created_at")
-
-
-# -------------------------
-# SAFETY FOR EMPTY COIN DATA
-# -------------------------
 if coin_df.empty:
-    st.warning("No data for selected coin")
     st.stop()
 
 
 # -------------------------
-# PRICE CHART
+# METRICS
 # -------------------------
-st.subheader(f"{selected_coin} Price Trend")
+last_price = coin_df["price"].iloc[-1]
 
-st.line_chart(
-    coin_df.set_index("created_at")["price"]
-)
-
-
-# -------------------------
-# MOVING AVERAGE
-# -------------------------
-coin_df["ma7"] = coin_df["price"].rolling(window=7).mean()
-
-st.subheader("Moving Average (7-period)")
-
-st.line_chart(
-    coin_df.set_index("created_at")[["price", "ma7"]]
-)
-
-
-# -------------------------
-# EMA
-# -------------------------
-coin_df["ema"] = coin_df["price"].ewm(span=7).mean()
-
-
-# -------------------------
-# VOLATILITY
-# -------------------------
 coin_df["returns"] = coin_df["price"].pct_change()
 volatility = coin_df["returns"].std()
 
-
-# -------------------------
-# MARKET HEAT
-# -------------------------
-if pd.isna(volatility):
-    heat = "N/A"
-elif volatility < 0.01:
-    heat = "Low"
-elif volatility < 0.03:
-    heat = "Medium"
-else:
-    heat = "High"
-
-
-# -------------------------
-# MARKET OVERVIEW
-# -------------------------
-st.subheader("Market Overview")
-
-last_price = coin_df["price"].iloc[-1]
+heat = (
+    "🟢 Low" if volatility < 0.01 else
+    "🟡 Medium" if volatility < 0.03 else
+    "🔴 High"
+)
 
 col1, col2, col3 = st.columns(3)
-
 col1.metric("Price", round(last_price, 2))
-col2.metric("Volatility", round(volatility, 6) if not pd.isna(volatility) else 0)
+col2.metric("Volatility", round(volatility, 6))
 col3.metric("Market Heat", heat)
 
 
 # -------------------------
-# PREDICTION MODELS
+# MOVING AVERAGE + EMA
 # -------------------------
-coin_df["rolling_mean"] = coin_df["price"].rolling(window=5).mean()
+coin_df["ma7"] = coin_df["price"].rolling(7).mean()
+coin_df["ema7"] = coin_df["price"].ewm(span=7).mean()
 
-pred_rolling = coin_df["rolling_mean"].iloc[-1]
-pred_ema = coin_df["ema"].iloc[-1]
+st.line_chart(coin_df.set_index("created_at")[["price", "ma7", "ema7"]])
 
-std = coin_df["price"].std()
-
-upper = last_price + std if not pd.isna(std) else last_price
-lower = last_price - std if not pd.isna(std) else last_price
-
-
-st.subheader("Prediction Models")
-
-col1, col2 = st.columns(2)
-
-col1.metric(
-    "Rolling Forecast",
-    round(pred_rolling, 2) if not pd.isna(pred_rolling) else "N/A"
-)
-
-col2.metric(
-    "EMA Forecast",
-    round(pred_ema, 2)
-)
-
-st.write(f"Confidence Range: {lower:.2f} - {upper:.2f}")
 
 # -------------------------
-# MULTI-COIN COMPARISON (USER SELECTABLE)
+# MULTI-COIN COMPARISON
 # -------------------------
-st.subheader("Multi-Coin Comparison")
+selected_coins = st.multiselect("Compare coins", coins, default=list(coins[:2]))
 
-# Get available coins
-all_coins = df["coin"].dropna().unique()
+compare_df = df[df["coin"].isin(selected_coins)]
+pivot = compare_df.pivot_table(index="created_at", columns="coin", values="price")
 
-# User selects coins
-selected_coins = st.multiselect(
-    "Select coins to compare",
-    options=all_coins,
-    default=list(all_coins[:2])
-)
-
-# Safety check
-if not selected_coins:
-    st.warning("Please select at least one coin to compare")
-    st.stop()
-
-# Filter data
-compare_df = df[df["coin"].isin(selected_coins)].copy()
-
-# Ensure time order
-compare_df["created_at"] = pd.to_datetime(compare_df["created_at"])
-compare_df = compare_df.sort_values("created_at")
-
-# Pivot
-pivot = compare_df.pivot_table(
-    index="created_at",
-    columns="coin",
-    values="price"
-)
-
-# Clean missing values
-pivot = pivot.dropna(how="all")
-
-# -------------------------
-# NORMALIZATION (SAFE VERSION)
-# -------------------------
-# Avoid crash if first row has NaN
-pivot_clean = pivot.dropna()
-
-if not pivot_clean.empty:
-    normalized = pivot_clean / pivot_clean.iloc[0] * 100
-
-    st.caption("Normalized performance (starting at 100)")
+if not pivot.empty:
+    normalized = pivot / pivot.iloc[0] * 100
     st.line_chart(normalized)
-else:
-    st.warning("Not enough data to normalize comparison")
 
 
 # -------------------------
-# PIPELINE HEALTH
+# ML MODEL (FIXED + BACKTEST)
 # -------------------------
-st.subheader("Pipeline Health Monitor")
+st.subheader("🤖 ML Prediction + Backtest")
 
-log_query = """
-SELECT * FROM pipeline_runs
-ORDER BY run_time DESC
-LIMIT 10
-"""
+ml = coin_df.copy()
 
-logs = pd.read_sql(log_query, engine)
+ml["lag1"] = ml["price"].shift(1)
+ml["lag2"] = ml["price"].shift(2)
+ml["lag3"] = ml["price"].shift(3)
+ml["ma5"] = ml["price"].rolling(5).mean()
+ml["std5"] = ml["price"].rolling(5).std()
 
-if logs.empty:
-    st.warning("No pipeline logs yet")
+ml = ml.dropna()
+
+if len(ml) > 50:
+
+    split = int(len(ml) * 0.8)
+
+    train = ml.iloc[:split]
+    test = ml.iloc[split:]
+
+    features = ["lag1", "lag2", "lag3", "ma5", "std5"]
+
+    model = RandomForestRegressor(n_estimators=100, random_state=42)
+    model.fit(train[features], train["price"])
+
+    preds = model.predict(test[features])
+
+    mae = mean_absolute_error(test["price"], preds)
+    rmse = np.sqrt(mean_squared_error(test["price"], preds))
+
+    st.metric("MAE", round(mae, 4))
+    st.metric("RMSE", round(rmse, 4))
+
+    # next prediction
+    latest = ml.iloc[-1]
+    next_pred = model.predict([[latest[f] for f in features]])[0]
+
+    st.metric("Next Price Prediction", round(next_pred, 2))
+
+    # SIGNALS
+    diff = next_pred - last_price
+
+    if diff > 0:
+        st.success("📈 BUY SIGNAL")
+    else:
+        st.error("📉 SELL SIGNAL")
+
 else:
-    st.dataframe(logs)
-
-    latest = logs.iloc[0]
-
-    col1, col2, col3 = st.columns(3)
-
-    col1.metric("Last Status", latest["status"])
-    col2.metric("Last Runtime (s)", round(latest["runtime_seconds"], 2))
-    col3.metric("Last Run Time", latest["run_time"])
+    st.warning("Not enough data for ML model")
 
 
 # -------------------------
 # RAW DATA
 # -------------------------
 st.subheader("Latest Data")
-
 st.dataframe(df.head(20))
