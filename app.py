@@ -6,7 +6,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🚀 Crypto Analytics Platform")
+st.title("Crypto Analytics Platform")
 
 st.write("""
 Use the left sidebar to navigate:
