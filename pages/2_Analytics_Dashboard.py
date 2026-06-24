@@ -63,6 +63,35 @@ else:
     st.error("No data detected")
 
 # -------------------------
+# PIPELINE HEALTH MONITOR
+# -------------------------
+st.subheader("⚙️ Pipeline Health Monitor")
+
+log_query = """
+SELECT * FROM pipeline_runs
+ORDER BY run_time DESC
+LIMIT 10
+"""
+
+logs = pd.read_sql(log_query, engine)
+
+st.dataframe(logs)
+
+if logs.empty:
+    st.warning("No pipeline logs yet")
+    st.stop()
+
+latest = logs.iloc[0]
+
+col1, col2, col3 = st.columns(3)
+
+col1.metric("Last Status", latest["status"])
+col2.metric("Last Runtime (s)", round(latest["runtime_seconds"], 2))
+col3.metric("Last Run Time", latest["run_time"])
+
+
+
+# -------------------------
 # RAW DATA TABLE
 # -------------------------
 st.subheader("📋 Latest Data")
