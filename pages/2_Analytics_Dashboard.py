@@ -105,6 +105,16 @@ st.line_chart(coin_df.set_index("created_at")[["price", "ma7", "ema7"]])
 
 
 # -------------------------
+# SIGNAL SECTION
+# -------------------------
+signal = generate_signal(last_price, predicted_price)
+
+st.subheader("ML Trading Signal")
+st.metric("Signal", signal)
+
+
+
+# -------------------------
 # MULTI-COIN COMPARISON
 # -------------------------
 selected_coins = st.multiselect("Compare coins", coins, default=list(coins[:2]))
@@ -132,6 +142,9 @@ ml["std5"] = ml["price"].rolling(5).std()
 
 ml = ml.dropna()
 
+next_pred = None
+model = None
+
 if len(ml) > 50:
 
     split = int(len(ml) * 0.8)
@@ -158,16 +171,37 @@ if len(ml) > 50:
 
     st.metric("Next Price Prediction", round(next_pred, 2))
 
-    # SIGNALS
-    diff = next_pred - last_price
-
-    if diff > 0:
-        st.success("📈 BUY SIGNAL")
-    else:
-        st.error("📉 SELL SIGNAL")
-
 else:
     st.warning("Not enough data for ML model")
+
+
+# -------------------------
+# SIGNAL ENGINE (SINGLE SOURCE OF TRUTH)
+# -------------------------
+
+def generate_signal(current_price, predicted_price):
+    diff = predicted_price - current_price
+
+    if diff > current_price * 0.002:
+        return "🟢 BUY"
+    elif diff < -current_price * 0.002:
+        return "🔴 SELL"
+    else:
+        return "🟡 HOLD"
+
+
+
+
+# -------------------------
+# SAFE SIGNAL USAGE
+# -------------------------
+st.subheader("ML Trading Signal")
+
+if next_pred is not None:
+    signal = generate_signal(last_price, next_pred)
+    st.metric("Signal", signal)
+else:
+    st.info("Signal unavailable (model not trained yet)")
 
 
 # -------------------------
