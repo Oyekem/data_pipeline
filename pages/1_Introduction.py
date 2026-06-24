@@ -1,6 +1,6 @@
 import streamlit as st
 
-st.title("📊 Crypto Data Pipeline System")
+st.title("Crypto Data Pipeline System")
 
 st.write("""
 Welcome to your real-time Crypto Analytics System.
@@ -16,13 +16,13 @@ This project demonstrates a full data engineering pipeline:
 ---
 """)
 
-st.subheader("🧠 System Architecture")
+st.subheader("System Architecture")
 
 st.write("""
 API → Python ETL Pipeline → Validation → Neon DB → Streamlit Dashboard
 """)
 
-st.subheader("🚀 Features")
+st.subheader("Features")
 
 st.write("""
 - Live crypto price tracking
