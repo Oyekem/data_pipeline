@@ -1,6 +1,4 @@
-1. Imports
 
-```python
 import streamlit as st
 import joblib
 import pandas as pd
@@ -9,17 +7,14 @@ import numpy as np
 from sqlalchemy import text
 from config import engine
 from ml_model import create_features, backtest
-```
 
-2. Page Title
 
-```python
+
+
 st.title("Crypto Price Prediction System")
-```
 
-3. Load Data
 
-```python
+
 @st.cache_data(ttl=30)
 def load_data():
     return pd.read_sql(
@@ -35,11 +30,10 @@ if df.empty:
 
 df["created_at"] = pd.to_datetime(df["created_at"])
 df["price"] = pd.to_numeric(df["price"], errors="coerce")
-```
 
-4. Coin Selector
 
-```python
+
+
 coins = sorted(df["coin"].dropna().unique())
 
 selected_coin = st.selectbox(
@@ -56,11 +50,10 @@ coin_df = (
 if coin_df.empty:
     st.warning("No data for selected coin")
     st.stop()
-```
 
-5. Baseline Model
 
-```python
+
+
 st.subheader("📈 Baseline Model")
 
 coin_df["price_change"] = coin_df["price"].diff()
@@ -84,11 +77,11 @@ col2.metric(
     "Simple Prediction",
     round(simple_pred, 2)
 )
-```
 
-6. Feature Engineering
 
-```python
+
+
+
 ml_df = create_features(coin_df)
 
 if ml_df.empty:
@@ -102,11 +95,11 @@ features = [
     "ma5",
     "std5"
 ]
-```
 
-7. Load Models
 
-```python
+
+
+
 try:
     rf_model = joblib.load(
         f"models/{selected_coin}_rf.pkl"
@@ -121,11 +114,13 @@ except FileNotFoundError:
         "Model files missing. Run train_model.py first."
     )
     st.stop()
-```
 
-8. Prediction Input
 
-```python
+
+
+
+
+
 latest = ml_df.iloc[-1]
 
 input_data = np.array([[
@@ -135,11 +130,13 @@ input_data = np.array([[
     latest["ma5"],
     latest["std5"]
 ]])
-```
 
-9. Generate Predictions
 
-```python
+
+
+
+
+
 rf_pred = rf_model.predict(input_data)[0]
 
 xgb_pred = xgb_model.predict(input_data)[0]
@@ -147,11 +144,12 @@ xgb_pred = xgb_model.predict(input_data)[0]
 avg_pred = (
     rf_pred + xgb_pred
 ) / 2
-```
 
-10. ML Predictions
 
-```python
+
+
+
+
 st.subheader("Ensemble Prediction")
 
 col1, col2, col3 = st.columns(3)
@@ -170,11 +168,12 @@ col3.metric(
     "Ensemble",
     round(avg_pred, 2)
 )
-```
 
-11. Feature Importance
 
-```python
+
+
+
+
 st.subheader("Feature Importance")
 
 fi_df = pd.DataFrame({
@@ -190,11 +189,13 @@ fi_df = fi_df.sort_values(
 st.bar_chart(
     fi_df.set_index("feature")
 )
-```
 
-12. Signal Engine
 
-```python
+
+
+
+
+
 def generate_signal(
     current_price,
     predicted_price
@@ -213,11 +214,14 @@ signal = generate_signal(
     last_price,
     avg_pred
 )
-```
 
-13. Trading Signal
 
-```python
+
+
+
+
+
+
 st.subheader("Trading Signal")
 
 col1, col2 = st.columns(2)
@@ -231,11 +235,15 @@ col2.metric(
     "Predicted Price",
     round(avg_pred, 2)
 )
-```
 
-14. Confidence Band
 
-```python
+
+
+
+
+
+
+
 st.subheader(
     "Prediction Confidence Band"
 )
@@ -263,12 +271,14 @@ index=[
 ])
 
 st.line_chart(band_df)
-```
 
-15. Model Comparison
 
-```python
-st.subheader("⚔️ Model Comparison")
+
+
+
+
+
+st.subheader("Model Comparison")
 
 compare_df = pd.DataFrame({
     "Model": [
@@ -286,11 +296,14 @@ compare_df = pd.DataFrame({
 })
 
 st.dataframe(compare_df)
-```
 
-16. Backtest
 
-```python
+
+
+
+
+
+
 mae, rmse = backtest(
     rf_model,
     coin_df
@@ -311,11 +324,12 @@ col2.metric(
     "RMSE",
     round(rmse, 4)
 )
-```
 
-17. Save Prediction History
 
-```python
+
+
+
+
 with engine.begin() as conn:
 
     conn.execute(
@@ -344,11 +358,14 @@ with engine.begin() as conn:
             "signal": signal
         }
     )
-```
 
-18. Prediction History
 
-```python
+
+
+
+
+
+
 st.subheader(
     "📜 Prediction History"
 )
@@ -379,11 +396,12 @@ st.metric(
         2
     )
 )
-```
 
-19. Insight
 
-```python
+
+
+
+
 st.subheader("💡 Insight")
 
 if avg_pred > simple_pred:
@@ -398,4 +416,3 @@ else:
 st.caption(
     f"Last updated: {coin_df['created_at'].max()}"
 )
-```
