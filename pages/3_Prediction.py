@@ -1,19 +1,31 @@
+1. Imports
+
+```python
 import streamlit as st
 import joblib
 import pandas as pd
 import numpy as np
+
+from sqlalchemy import text
 from config import engine
 from ml_model import create_features, backtest
+```
 
-st.title("Price Prediction (Next 5 Minutes)")
+2. Page Title
 
-# -----------------------
-# LOAD DATA
-# -----------------------
+```python
+st.title("Crypto Price Prediction System")
+```
+
+3. Load Data
+
+```python
 @st.cache_data(ttl=30)
 def load_data():
-    query = "SELECT * FROM crypto_prices ORDER BY created_at DESC"
-    return pd.read_sql(query, engine)
+    return pd.read_sql(
+        "SELECT * FROM crypto_prices ORDER BY created_at DESC",
+        engine
+    )
 
 df = load_data()
 
@@ -23,28 +35,36 @@ if df.empty:
 
 df["created_at"] = pd.to_datetime(df["created_at"])
 df["price"] = pd.to_numeric(df["price"], errors="coerce")
+```
 
+4. Coin Selector
 
-# -----------------------
-# COIN SELECTOR (FIXED)
-# -----------------------
+```python
 coins = sorted(df["coin"].dropna().unique())
 
-selected_coin = st.selectbox("Select Coin", coins)
+selected_coin = st.selectbox(
+    "Select Coin",
+    coins
+)
 
-coin_df = df[df["coin"] == selected_coin].copy()
-coin_df = coin_df.sort_values("created_at")
+coin_df = (
+    df[df["coin"] == selected_coin]
+    .copy()
+    .sort_values("created_at")
+)
 
 if coin_df.empty:
     st.warning("No data for selected coin")
     st.stop()
+```
 
-# -----------------------
-# BASELINE MODEL
-# -----------------------
-st.subheader("Baseline Model")
+5. Baseline Model
+
+```python
+st.subheader("📈 Baseline Model")
 
 coin_df["price_change"] = coin_df["price"].diff()
+
 avg_change = coin_df["price_change"].mean()
 
 if np.isnan(avg_change):
@@ -54,117 +74,328 @@ last_price = coin_df["price"].iloc[-1]
 simple_pred = last_price + avg_change
 
 col1, col2 = st.columns(2)
-col1.metric("Current Price", round(last_price, 2))
-col2.metric("Simple Prediction", round(simple_pred, 2))
 
+col1.metric(
+    "Current Price",
+    round(last_price, 2)
+)
 
-# -----------------------
-# FEATURE ENGINEERING
-# -----------------------
+col2.metric(
+    "Simple Prediction",
+    round(simple_pred, 2)
+)
+```
+
+6. Feature Engineering
+
+```python
 ml_df = create_features(coin_df)
 
 if ml_df.empty:
-    st.warning("Not enough data for ML model")
+    st.warning("Not enough data for ML prediction")
     st.stop()
 
-features = ["lag1", "lag2", "lag3", "ma5", "std5"]
+features = [
+    "lag1",
+    "lag2",
+    "lag3",
+    "ma5",
+    "std5"
+]
+```
 
+7. Load Models
 
-# -----------------------
-# LOAD MODEL (ONLY SOURCE OF TRUTH)
-# -----------------------
+```python
 try:
-    model = joblib.load("models/rf_model.pkl")
+    rf_model = joblib.load(
+        f"models/{selected_coin}_rf.pkl"
+    )
+
+    xgb_model = joblib.load(
+        f"models/{selected_coin}_xgb.pkl"
+    )
+
 except FileNotFoundError:
-    st.error("Model not found. Run train_model.py first.")
+    st.error(
+        "Model files missing. Run train_model.py first."
+    )
     st.stop()
+```
 
+8. Prediction Input
 
-# -----------------------
-# PREDICTION
-# -----------------------
+```python
 latest = ml_df.iloc[-1]
 
-input_data = np.array([[latest[f] for f in features]])
+input_data = np.array([[
+    latest["lag1"],
+    latest["lag2"],
+    latest["lag3"],
+    latest["ma5"],
+    latest["std5"]
+]])
+```
 
-ml_pred = model.predict(input_data)[0]
+9. Generate Predictions
 
+```python
+rf_pred = rf_model.predict(input_data)[0]
 
-st.subheader("ML Model Prediction")
+xgb_pred = xgb_model.predict(input_data)[0]
 
-col1, col2 = st.columns(2)
-col1.metric("ML Prediction", round(ml_pred, 2))
-col2.metric("Model", "Random Forest")
+avg_pred = (
+    rf_pred + xgb_pred
+) / 2
+```
 
+10. ML Predictions
 
-# -----------------------
-# SIGNAL ENGINE (SINGLE SOURCE)
-# -----------------------
-def generate_signal(current_price, predicted_price):
+```python
+st.subheader("Ensemble Prediction")
+
+col1, col2, col3 = st.columns(3)
+
+col1.metric(
+    "Random Forest",
+    round(rf_pred, 2)
+)
+
+col2.metric(
+    "XGBoost",
+    round(xgb_pred, 2)
+)
+
+col3.metric(
+    "Ensemble",
+    round(avg_pred, 2)
+)
+```
+
+11. Feature Importance
+
+```python
+st.subheader("Feature Importance")
+
+fi_df = pd.DataFrame({
+    "feature": features,
+    "importance": rf_model.feature_importances_
+})
+
+fi_df = fi_df.sort_values(
+    "importance",
+    ascending=True
+)
+
+st.bar_chart(
+    fi_df.set_index("feature")
+)
+```
+
+12. Signal Engine
+
+```python
+def generate_signal(
+    current_price,
+    predicted_price
+):
     diff = predicted_price - current_price
 
     if diff > current_price * 0.002:
         return "🟢 BUY"
+
     elif diff < -current_price * 0.002:
         return "🔴 SELL"
-    else:
-        return "🟡 HOLD"
 
+    return "🟡 HOLD"
 
-signal = generate_signal(last_price, ml_pred)
+signal = generate_signal(
+    last_price,
+    avg_pred
+)
+```
 
+13. Trading Signal
+
+```python
 st.subheader("Trading Signal")
 
 col1, col2 = st.columns(2)
-col1.metric("Signal", signal)
-col2.metric("Predicted Price", round(ml_pred, 2))
 
+col1.metric(
+    "Signal",
+    signal
+)
 
-# -----------------------
-# CONFIDENCE RANGE
-# -----------------------
-volatility = coin_df["price"].pct_change().std()
+col2.metric(
+    "Predicted Price",
+    round(avg_pred, 2)
+)
+```
 
-upper = ml_pred * (1 + volatility)
-lower = ml_pred * (1 - volatility)
+14. Confidence Band
 
-st.write(f"Confidence Range: {lower:.2f} - {upper:.2f}")
+```python
+st.subheader(
+    "Prediction Confidence Band"
+)
 
+volatility = (
+    coin_df["price"]
+    .pct_change()
+    .std()
+)
 
-# -----------------------
-# MODEL COMPARISON
-# -----------------------
-st.subheader("Model Comparison")
+upper = avg_pred * (1 + volatility)
+lower = avg_pred * (1 - volatility)
+
+band_df = pd.DataFrame({
+    "Price": [
+        lower,
+        avg_pred,
+        upper
+    ]
+},
+index=[
+    "Lower",
+    "Prediction",
+    "Upper"
+])
+
+st.line_chart(band_df)
+```
+
+15. Model Comparison
+
+```python
+st.subheader("⚔️ Model Comparison")
 
 compare_df = pd.DataFrame({
-    "Model": ["Baseline", "ML"],
-    "Prediction": [simple_pred, ml_pred]
+    "Model": [
+        "Baseline",
+        "Random Forest",
+        "XGBoost",
+        "Ensemble"
+    ],
+    "Prediction": [
+        simple_pred,
+        rf_pred,
+        xgb_pred,
+        avg_pred
+    ]
 })
 
 st.dataframe(compare_df)
+```
 
+16. Backtest
 
-# -----------------------
-# BACKTEST (CLEAN)
-# -----------------------
-mae, rmse = backtest(model, coin_df)
+```python
+mae, rmse = backtest(
+    rf_model,
+    coin_df
+)
 
-st.subheader("Model Performance")
+st.subheader(
+    "Model Performance"
+)
 
 col1, col2 = st.columns(2)
-col1.metric("MAE", round(mae, 4))
-col2.metric("RMSE", round(rmse, 4))
 
+col1.metric(
+    "MAE",
+    round(mae, 4)
+)
 
-# -----------------------
-# INSIGHT
-# -----------------------
-st.subheader("Insight")
+col2.metric(
+    "RMSE",
+    round(rmse, 4)
+)
+```
 
-if ml_pred > simple_pred:
-    st.success("ML model is more bullish than baseline")
+17. Save Prediction History
+
+```python
+with engine.begin() as conn:
+
+    conn.execute(
+        text("""
+        INSERT INTO prediction_history
+        (
+            prediction_time,
+            coin,
+            predicted_price,
+            actual_price,
+            signal
+        )
+        VALUES
+        (
+            NOW(),
+            :coin,
+            :predicted_price,
+            :actual_price,
+            :signal
+        )
+        """),
+        {
+            "coin": selected_coin,
+            "predicted_price": float(avg_pred),
+            "actual_price": float(last_price),
+            "signal": signal
+        }
+    )
+```
+
+18. Prediction History
+
+```python
+st.subheader(
+    "📜 Prediction History"
+)
+
+history = pd.read_sql(
+    """
+    SELECT *
+    FROM prediction_history
+    ORDER BY prediction_time DESC
+    LIMIT 50
+    """,
+    engine
+)
+
+history["error"] = (
+    abs(
+        history["predicted_price"]
+        - history["actual_price"]
+    )
+)
+
+st.dataframe(history)
+
+st.metric(
+    "Average Prediction Error",
+    round(
+        history["error"].mean(),
+        2
+    )
+)
+```
+
+19. Insight
+
+```python
+st.subheader("💡 Insight")
+
+if avg_pred > simple_pred:
+    st.success(
+        "Ensemble model is more bullish than baseline"
+    )
 else:
-    st.warning("ML model is more conservative than baseline")
+    st.warning(
+        "Ensemble model is more conservative than baseline"
+    )
 
-
-st.caption(f"Last updated: {coin_df['created_at'].max()}")
+st.caption(
+    f"Last updated: {coin_df['created_at'].max()}"
+)
+```
