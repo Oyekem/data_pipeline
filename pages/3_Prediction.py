@@ -7,12 +7,33 @@ import numpy as np
 from sqlalchemy import text
 from config import engine
 from ml_model import create_features, backtest
+from streamlit_autorefresh import st_autorefresh
+from datetime import datetime
 
 
 
 
 st.title("Crypto Price Prediction System")
 
+
+
+
+# LIVE AUTO REFRESH
+st_autorefresh(interval=30000, key="refresh")
+
+# LIVE BADGE
+st.markdown(
+    """
+    <div style="display:flex; align-items:center; gap:10px;">
+        <span style="color:green; font-weight:bold;">🟢 LIVE</span>
+        <span style="font-size:12px;">Auto-refreshing every 30s</span>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+
+df = df.tail(200)   # keeps dashboard fast + smooth
 
 
 @st.cache_data(ttl=30)
@@ -50,6 +71,9 @@ coin_df = (
 if coin_df.empty:
     st.warning("No data for selected coin")
     st.stop()
+
+
+coin_df = coin_df.tail(150)
 
 
 
@@ -232,7 +256,9 @@ col2.metric(
 
 
 
-
+st.caption(
+    f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+)
 
 
 
