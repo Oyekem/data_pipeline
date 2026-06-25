@@ -8,35 +8,12 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 from config import engine
 from streamlit_autorefresh import st_autorefresh
 
-
-
-# -------------------------
-# SIGNAL SECTION
-# -------------------------
-def generate_signal(current_price, predicted_price):
-    diff = predicted_price - current_price
-
-    if diff > current_price * 0.002:
-        return "🟢 BUY"
-    elif diff < -current_price * 0.002:
-        return "🔴 SELL"
-    else:
-        return "🟡 HOLD"
-
-
-signal = generate_signal(last_price, predicted_price)
-
-st.subheader("ML Trading Signal")
-st.metric("Signal", signal)
-
-
 # -------------------------
 # LIVE REFRESH
 # -------------------------
 st_autorefresh(interval=30000, key="refresh")
 
-st.title("📊 Crypto Trading Intelligence System")
-
+st.title("Crypto Trading Intelligence System")
 
 # -------------------------
 # LOAD DATA
@@ -46,24 +23,19 @@ def load_data():
     query = "SELECT * FROM crypto_prices ORDER BY created_at DESC"
     return pd.read_sql(query, engine)
 
-
 @st.cache_data(ttl=30)
 def load_logs():
     return pd.read_sql("SELECT * FROM pipeline_runs ORDER BY run_time DESC", engine)
 
-
 df = load_data()
 logs = load_logs()
-
 
 if df.empty:
     st.warning("No data yet")
     st.stop()
 
-
 df["created_at"] = pd.to_datetime(df["created_at"])
 df["price"] = pd.to_numeric(df["price"], errors="coerce")
-
 
 # -------------------------
 # PIPELINE HEALTH
@@ -78,24 +50,23 @@ if not logs.empty:
     col2.metric("Runtime", round(latest_log["runtime_seconds"], 2))
     col3.metric("Runs", len(logs))
 
-
     success_rate = (logs["status"] == "success").mean() * 100
     st.metric("Success Rate", f"{success_rate:.2f}%")
 else:
     st.warning("No logs yet")
 
-
 # -------------------------
 # COIN SELECTOR
 # -------------------------
-coins = df["coin"].unique()
+coins = df["coin"].dropna().unique()
 selected_coin = st.selectbox("Select Coin", coins)
 
-coin_df = df[df["coin"] == selected_coin].sort_values("created_at")
+coin_df = df[df["coin"] == selected_coin].copy()
+coin_df = coin_df.sort_values("created_at")
 
 if coin_df.empty:
+    st.warning("No data for selected coin")
     st.stop()
-
 
 # -------------------------
 # METRICS
@@ -116,34 +87,40 @@ col1.metric("Price", round(last_price, 2))
 col2.metric("Volatility", round(volatility, 6))
 col3.metric("Market Heat", heat)
 
-
 # -------------------------
 # MOVING AVERAGE + EMA
 # -------------------------
 coin_df["ma7"] = coin_df["price"].rolling(7).mean()
 coin_df["ema7"] = coin_df["price"].ewm(span=7).mean()
 
-st.line_chart(coin_df.set_index("created_at")[["price", "ma7", "ema7"]])
-
+st.line_chart(
+    coin_df.set_index("created_at")[["price", "ma7", "ema7"]]
+)
 
 # -------------------------
 # MULTI-COIN COMPARISON
 # -------------------------
-selected_coins = st.multiselect("Compare coins", coins, default=list(coins[:2]))
+selected_coins = st.multiselect(
+    "Compare coins",
+    coins,
+    default=list(coins[:2])
+)
 
 compare_df = df[df["coin"].isin(selected_coins)]
-pivot = compare_df.pivot_table(index="created_at", columns="coin", values="price")
+pivot = compare_df.pivot_table(
+    index="created_at",
+    columns="coin",
+    values="price"
+).dropna(how="all")
 
 if not pivot.empty:
     normalized = pivot / pivot.iloc[0] * 100
+    st.subheader("Multi-Coin Performance (Normalized)")
     st.line_chart(normalized)
 
-
 # -------------------------
-# ML MODEL (FIXED + BACKTEST)
+# FEATURE ENGINEERING
 # -------------------------
-st.subheader("🤖 ML Prediction + Backtest")
-
 ml = coin_df.copy()
 
 ml["lag1"] = ml["price"].shift(1)
@@ -157,14 +134,19 @@ ml = ml.dropna()
 next_pred = None
 model = None
 
+features = ["lag1", "lag2", "lag3", "ma5", "std5"]
+
+# -------------------------
+# ML MODEL + BACKTEST
+# -------------------------
+st.subheader("🤖 ML Prediction + Backtest")
+
 if len(ml) > 50:
 
     split = int(len(ml) * 0.8)
 
     train = ml.iloc[:split]
     test = ml.iloc[split:]
-
-    features = ["lag1", "lag2", "lag3", "ma5", "std5"]
 
     model = RandomForestRegressor(n_estimators=100, random_state=42)
     model.fit(train[features], train["price"])
@@ -186,35 +168,33 @@ if len(ml) > 50:
 else:
     st.warning("Not enough data for ML model")
 
-
 # -------------------------
 # SIGNAL ENGINE (SINGLE SOURCE OF TRUTH)
 # -------------------------
-
 def generate_signal(current_price, predicted_price):
     diff = predicted_price - current_price
+    threshold = current_price * 0.002
 
-    if diff > current_price * 0.002:
+    if diff > threshold:
         return "🟢 BUY"
-    elif diff < -current_price * 0.002:
+    elif diff < -threshold:
         return "🔴 SELL"
     else:
         return "🟡 HOLD"
 
-
-
-
 # -------------------------
-# SAFE SIGNAL USAGE
+# SIGNAL DISPLAY
 # -------------------------
-st.subheader("ML Trading Signal")
+st.subheader("Trading Signal Engine")
 
 if next_pred is not None:
     signal = generate_signal(last_price, next_pred)
-    st.metric("Signal", signal)
-else:
-    st.info("Signal unavailable (model not trained yet)")
 
+    col1, col2 = st.columns(2)
+    col1.metric("Signal", signal)
+    col2.metric("Predicted Price", round(next_pred, 2))
+else:
+    st.info("Signal unavailable (not enough training data)")
 
 # -------------------------
 # RAW DATA
