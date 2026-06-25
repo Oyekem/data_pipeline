@@ -54,7 +54,7 @@ if coin_df.empty:
 
 
 
-st.subheader("📈 Baseline Model")
+st.subheader("Baseline Model")
 
 coin_df["price_change"] = coin_df["price"].diff()
 
@@ -98,15 +98,16 @@ features = [
 
 
 
+coin = selected_coin.lower()
 
 
 try:
     rf_model = joblib.load(
-        f"models/{selected_coin}_rf.pkl"
+        f"models/{coin}_rf.pkl"
     )
 
     xgb_model = joblib.load(
-        f"models/{selected_coin}_xgb.pkl"
+        f"models/{coin}_xgb.pkl"
     )
 
 except FileNotFoundError:
@@ -135,40 +136,35 @@ input_data = np.array([[
 
 
 
-
-
 rf_pred = rf_model.predict(input_data)[0]
-
 xgb_pred = xgb_model.predict(input_data)[0]
 
-avg_pred = (
-    rf_pred + xgb_pred
-) / 2
+# use real performance (BEST PRACTICE)
+rf_mae, _ = backtest(rf_model, coin_df)
+xgb_mae, _ = backtest(xgb_model, coin_df)
+
+rf_weight = 1 / (rf_mae + 1e-6)
+xgb_weight = 1 / (xgb_mae + 1e-6)
+
+total = rf_weight + xgb_weight
+rf_weight /= total
+xgb_weight /= total
+
+avg_pred = (rf_pred * rf_weight) + (xgb_pred * xgb_weight)
 
 
 
 
-
-
-st.subheader("Ensemble Prediction")
+st.subheader("Ensemble Prediction (Weighted)")
 
 col1, col2, col3 = st.columns(3)
 
-col1.metric(
-    "Random Forest",
-    round(rf_pred, 2)
-)
+col1.metric("Random Forest", round(rf_pred, 2))
+col2.metric("XGBoost", round(xgb_pred, 2))
+col3.metric("Final Ensemble", round(avg_pred, 2))
 
-col2.metric(
-    "XGBoost",
-    round(xgb_pred, 2)
-)
-
-col3.metric(
-    "Ensemble",
-    round(avg_pred, 2)
-)
-
+st.write(f"RF weight: {rf_weight:.2f}")
+st.write(f"XGB weight: {xgb_weight:.2f}")
 
 
 
@@ -195,7 +191,6 @@ st.bar_chart(
 
 
 
-
 def generate_signal(
     current_price,
     predicted_price
@@ -210,12 +205,10 @@ def generate_signal(
 
     return "🟡 HOLD"
 
-signal = generate_signal(
-    last_price,
-    avg_pred
-)
+signal = generate_signal(last_price, avg_pred)
+confidence = abs(rf_pred - xgb_pred) / last_price
 
-
+st.metric("Confidence Spread", round(confidence, 4))
 
 
 
@@ -367,7 +360,7 @@ with engine.begin() as conn:
 
 
 st.subheader(
-    "📜 Prediction History"
+    "Prediction History"
 )
 
 history = pd.read_sql(
@@ -402,7 +395,7 @@ st.metric(
 
 
 
-st.subheader("💡 Insight")
+st.subheader("Insight")
 
 if avg_pred > simple_pred:
     st.success(
