@@ -44,12 +44,12 @@ st.markdown("## 🔗 Modules")
 col1, col2 = st.columns(2)
 
 with col1:
-    st.page_link("pages/1_Live.py", label="Live Dashboard")
-    st.page_link("pages/3_Prediction.py", label="Prediction Engine")
+    st.page_link("pages/1_Introduction.py", label="🏠 Introduction")
+    st.page_link("pages/3_Prediction.py", label="📈 Prediction Engine")
 
 with col2:
-    st.page_link("pages/4_History.py", label="Prediction History")
-    st.page_link("pages/2_Training.py", label="Model Training")
+    st.page_link("pages/2_Analytics_Dashboard.py", label="📊 Analytics Dashboard")
+
 
 # -----------------------------
 # FOOTER
