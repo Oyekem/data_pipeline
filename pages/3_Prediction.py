@@ -57,7 +57,7 @@ ml_pred = predict_next(model, btc)
 
 col1, col2 = st.columns(2)
 col1.metric("ML Prediction", round(ml_pred, 2))
-col2.metric("Model", "Random Forest"
+col2.metric("Model", "Random Forest")
 
 
 # -----------------------
