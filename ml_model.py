@@ -1,9 +1,36 @@
 import numpy as np
 import pandas as pd
 import joblib
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.ensemble import RandomForestRegressor
 
-MODEL_PATH = "model.pkl"
+MODEL_PATH = "models/rf_model.pkl"
+
+# -----------------------
+# BACKTEST
+# -----------------------
+
+def backtest(model, df):
+    df = create_features(df)
+
+    if len(df) < 50:
+        return 0, 0
+
+    features = ["lag1", "lag2", "lag3", "ma5", "std5"]
+
+    split = int(len(df) * 0.8)
+
+    train = df.iloc[:split]
+    test = df.iloc[split:]
+
+    # ❌ DO NOT retrain model here
+    preds = model.predict(test[features])
+
+    mae = mean_absolute_error(test["price"], preds)
+    rmse = np.sqrt(mean_squared_error(test["price"], preds))
+
+    return mae, rmse
+
 
 
 # -----------------------
@@ -51,9 +78,12 @@ def load_model():
 def predict_next(model, df):
     df = create_features(df)
 
+    if len(df) == 0:
+        return None
+
     latest = df.iloc[-1]
 
-    X_input = np.array([[
+    X_input = np.array([[ 
         latest["lag1"],
         latest["lag2"],
         latest["lag3"],
