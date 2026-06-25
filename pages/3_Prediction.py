@@ -12,9 +12,7 @@ from datetime import datetime
 
 
 
-
 st.title("Crypto Price Prediction System")
-
 
 
 
@@ -33,8 +31,6 @@ st.markdown(
 )
 
 
-df = df.tail(200)   # keeps dashboard fast + smooth
-
 
 @st.cache_data(ttl=30)
 def load_data():
@@ -51,6 +47,10 @@ if df.empty:
 
 df["created_at"] = pd.to_datetime(df["created_at"])
 df["price"] = pd.to_numeric(df["price"], errors="coerce")
+
+
+
+df = df.sort_values("created_at").tail(200)
 
 
 
