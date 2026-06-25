@@ -8,6 +8,28 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 from config import engine
 from streamlit_autorefresh import st_autorefresh
 
+
+
+# -------------------------
+# SIGNAL SECTION
+# -------------------------
+def generate_signal(current_price, predicted_price):
+    diff = predicted_price - current_price
+
+    if diff > current_price * 0.002:
+        return "🟢 BUY"
+    elif diff < -current_price * 0.002:
+        return "🔴 SELL"
+    else:
+        return "🟡 HOLD"
+
+
+signal = generate_signal(last_price, predicted_price)
+
+st.subheader("ML Trading Signal")
+st.metric("Signal", signal)
+
+
 # -------------------------
 # LIVE REFRESH
 # -------------------------
@@ -102,16 +124,6 @@ coin_df["ma7"] = coin_df["price"].rolling(7).mean()
 coin_df["ema7"] = coin_df["price"].ewm(span=7).mean()
 
 st.line_chart(coin_df.set_index("created_at")[["price", "ma7", "ema7"]])
-
-
-# -------------------------
-# SIGNAL SECTION
-# -------------------------
-signal = generate_signal(last_price, predicted_price)
-
-st.subheader("ML Trading Signal")
-st.metric("Signal", signal)
-
 
 
 # -------------------------
