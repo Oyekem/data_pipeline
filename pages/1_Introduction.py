@@ -7,11 +7,11 @@ Welcome to your real-time Crypto Analytics System.
 
 This project demonstrates a full data engineering pipeline:
 
-✔ API ingestion (CoinGecko)
-✔ Data validation layer
-✔ Cloud PostgreSQL (Neon)
-✔ GitHub Actions automation
-✔ Live Streamlit dashboard
+- API ingestion (CoinGecko)
+- Data validation layer
+- Cloud PostgreSQL (Neon)
+- GitHub Actions automation
+- Live Streamlit dashboard
 
 ---
 """)
