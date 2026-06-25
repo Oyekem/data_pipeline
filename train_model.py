@@ -48,6 +48,8 @@ model.fit(X, y)
 # -------------------------
 os.makedirs("models", exist_ok=True)
 
-joblib.dump(model, "models/rf_model.pkl")
+joblib.dump(model, "models/rf_model.pkl.tmp")
+os.replace("models/rf_model.pkl.tmp", "models/rf_model.pkl")
+
 
 print("Model trained and saved successfully!")
