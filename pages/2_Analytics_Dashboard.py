@@ -2,33 +2,28 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_absolute_error, mean_squared_error
-
 from config import engine
 from streamlit_autorefresh import st_autorefresh
+from ml_model import create_features
 
 # -------------------------
-# LIVE REFRESH
+# LIVE REFRESH SYSTEM
 # -------------------------
 st_autorefresh(interval=30000, key="refresh")
 
-st.title("Crypto Trading Intelligence System")
+st.title("📊 Crypto Trading Intelligence System")
+
+st.markdown("🟢 LIVE Dashboard (Auto-refresh every 30s)")
 
 # -------------------------
 # LOAD DATA
 # -------------------------
 @st.cache_data(ttl=30)
 def load_data():
-    query = "SELECT * FROM crypto_prices ORDER BY created_at DESC"
+    query = "SELECT * FROM crypto_prices ORDER BY created_at ASC"
     return pd.read_sql(query, engine)
 
-@st.cache_data(ttl=30)
-def load_logs():
-    return pd.read_sql("SELECT * FROM pipeline_runs ORDER BY run_time DESC", engine)
-
 df = load_data()
-logs = load_logs()
 
 if df.empty:
     st.warning("No data yet")
@@ -38,25 +33,7 @@ df["created_at"] = pd.to_datetime(df["created_at"])
 df["price"] = pd.to_numeric(df["price"], errors="coerce")
 
 # -------------------------
-# PIPELINE HEALTH
-# -------------------------
-st.subheader("⚙️ Pipeline Health")
-
-if not logs.empty:
-    latest_log = logs.iloc[0]
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Status", latest_log["status"])
-    col2.metric("Runtime", round(latest_log["runtime_seconds"], 2))
-    col3.metric("Runs", len(logs))
-
-    success_rate = (logs["status"] == "success").mean() * 100
-    st.metric("Success Rate", f"{success_rate:.2f}%")
-else:
-    st.warning("No logs yet")
-
-# -------------------------
-# COIN SELECTOR
+# COIN SELECTION
 # -------------------------
 coins = df["coin"].dropna().unique()
 selected_coin = st.selectbox("Select Coin", coins)
@@ -69,7 +46,18 @@ if coin_df.empty:
     st.stop()
 
 # -------------------------
-# METRICS
+# FEATURE ENGINEERING (FULL INDICATORS)
+# -------------------------
+coin_df = create_features(coin_df)
+
+# extra smoothing features
+coin_df["ma7"] = coin_df["price"].rolling(7).mean()
+coin_df["ema7"] = coin_df["price"].ewm(span=7).mean()
+
+coin_df = coin_df.dropna()
+
+# -------------------------
+# CORE METRICS
 # -------------------------
 last_price = coin_df["price"].iloc[-1]
 
@@ -87,19 +75,41 @@ col1.metric("Price", round(last_price, 2))
 col2.metric("Volatility", round(volatility, 6))
 col3.metric("Market Heat", heat)
 
-# -------------------------
-# MOVING AVERAGE + EMA
-# -------------------------
-coin_df["ma7"] = coin_df["price"].rolling(7).mean()
-coin_df["ema7"] = coin_df["price"].ewm(span=7).mean()
-
+# =====================================================
+# 📈 PRICE + MOVING AVERAGES
+# =====================================================
+st.subheader("📈 Price Trend")
 st.line_chart(
-    coin_df.set_index("created_at")[["price", "ma7", "ema7"]]
+    coin_df.set_index("created_at")[["price", "ma7", "ema7"]].tail(100)
 )
 
-# -------------------------
-# MULTI-COIN COMPARISON
-# -------------------------
+# =====================================================
+# 📊 TECHNICAL INDICATORS
+# =====================================================
+
+st.subheader("RSI (14)")
+st.line_chart(
+    coin_df.set_index("created_at")["rsi"].tail(100)
+)
+
+st.subheader("MACD")
+st.line_chart(
+    coin_df.set_index("created_at")[["macd", "macd_signal"]].tail(100)
+)
+
+st.subheader("Bollinger Bands")
+st.line_chart(
+    coin_df.set_index("created_at")[["price", "bb_upper", "bb_lower"]].tail(100)
+)
+
+st.subheader("EMA Trend")
+st.line_chart(
+    coin_df.set_index("created_at")[["price", "ema12", "ema26"]].tail(100)
+)
+
+# =====================================================
+# 📊 MULTI-COIN COMPARISON
+# =====================================================
 selected_coins = st.multiselect(
     "Compare coins",
     coins,
@@ -107,6 +117,7 @@ selected_coins = st.multiselect(
 )
 
 compare_df = df[df["coin"].isin(selected_coins)]
+
 pivot = compare_df.pivot_table(
     index="created_at",
     columns="coin",
@@ -115,89 +126,69 @@ pivot = compare_df.pivot_table(
 
 if not pivot.empty:
     normalized = pivot / pivot.iloc[0] * 100
-    st.subheader("Multi-Coin Performance (Normalized)")
-    st.line_chart(normalized)
+    st.subheader("📊 Multi-Coin Performance (Normalized)")
+    st.line_chart(normalized.tail(200))
+
+# =====================================================
+# 🧠 ADVANCED PREDICTION LAYER
+# =====================================================
+
+st.subheader("🧠 Prediction Quality Layer")
 
 # -------------------------
-# FEATURE ENGINEERING
+# BASELINE PREDICTION
 # -------------------------
-ml = coin_df.copy()
-
-ml["lag1"] = ml["price"].shift(1)
-ml["lag2"] = ml["price"].shift(2)
-ml["lag3"] = ml["price"].shift(3)
-ml["ma5"] = ml["price"].rolling(5).mean()
-ml["std5"] = ml["price"].rolling(5).std()
-
-ml = ml.dropna()
-
-next_pred = None
-model = None
-
-features = ["lag1", "lag2", "lag3", "ma5", "std5"]
+simple_pred = last_price + coin_df["price"].diff().mean()
 
 # -------------------------
-# ML MODEL + BACKTEST
+# MULTI-STEP FORECAST (5 STEP)
 # -------------------------
-st.subheader("🤖 ML Prediction + Backtest")
+def multi_step_forecast(series, steps=5):
+    preds = []
+    data = series.copy()
 
-if len(ml) > 50:
+    for _ in range(steps):
+        diff = data.diff().mean()
+        next_val = data.iloc[-1] + diff
+        preds.append(next_val)
+        data = pd.concat([data, pd.Series([next_val])], ignore_index=True)
 
-    split = int(len(ml) * 0.8)
+    return preds
 
-    train = ml.iloc[:split]
-    test = ml.iloc[split:]
-
-    model = RandomForestRegressor(n_estimators=100, random_state=42)
-    model.fit(train[features], train["price"])
-
-    preds = model.predict(test[features])
-
-    mae = mean_absolute_error(test["price"], preds)
-    rmse = np.sqrt(mean_squared_error(test["price"], preds))
-
-    st.metric("MAE", round(mae, 4))
-    st.metric("RMSE", round(rmse, 4))
-
-    # next prediction
-    latest = ml.iloc[-1]
-    next_pred = model.predict([[latest[f] for f in features]])[0]
-
-    st.metric("Next Price Prediction", round(next_pred, 2))
-
-else:
-    st.warning("Not enough data for ML model")
+forecast_5 = multi_step_forecast(coin_df["price"], 5)
 
 # -------------------------
-# SIGNAL ENGINE (SINGLE SOURCE OF TRUTH)
+# CONFIDENCE INTERVALS
 # -------------------------
-def generate_signal(current_price, predicted_price):
-    diff = predicted_price - current_price
-    threshold = current_price * 0.002
+residuals = coin_df["price"].diff()
+std_error = residuals.std()
 
-    if diff > threshold:
-        return "🟢 BUY"
-    elif diff < -threshold:
-        return "🔴 SELL"
-    else:
-        return "🟡 HOLD"
+upper = simple_pred + (1.96 * std_error)
+lower = simple_pred - (1.96 * std_error)
 
 # -------------------------
-# SIGNAL DISPLAY
+# MODEL CONFIDENCE SCORE
 # -------------------------
-st.subheader("Trading Signal Engine")
+confidence_score = 1 / (std_error + 1e-6)
+confidence_score = min(confidence_score / 100, 1)
 
-if next_pred is not None:
-    signal = generate_signal(last_price, next_pred)
+# =====================================================
+# 📊 DISPLAY PREDICTION RESULTS
+# =====================================================
+col1, col2, col3 = st.columns(3)
 
-    col1, col2 = st.columns(2)
-    col1.metric("Signal", signal)
-    col2.metric("Predicted Price", round(next_pred, 2))
-else:
-    st.info("Signal unavailable (not enough training data)")
+col1.metric("Next Price (Baseline)", round(simple_pred, 2))
+col2.metric("Confidence Score", round(confidence_score, 3))
+col3.metric("Volatility", heat)
 
-# -------------------------
-# RAW DATA
-# -------------------------
+st.write("📉 Confidence Interval")
+st.write(f"Lower: {lower:.2f} | Upper: {upper:.2f}")
+
+st.subheader("🔮 5-Step Forecast")
+st.line_chart(pd.DataFrame(forecast_5, columns=["Forecast"]))
+
+# =====================================================
+# 📋 RAW DATA
+# =====================================================
 st.subheader("Latest Data")
-st.dataframe(df.head(20))
+st.dataframe(df.tail(20))
