@@ -35,7 +35,8 @@ def create_features(data):
     return data.dropna()
 
 
-features = ["lag1", "lag2", "lag3", "ma5", "std5"]
+
+features = [ "lag1", "lag2", "lag3", "ma5", "ma10", "ema12", "ema26", "macd", "macd_signal", "bb_upper", "bb_lower", "rsi", "momentum", "std5" ]
 
 
 # -------------------
