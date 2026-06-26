@@ -12,7 +12,6 @@ from ml_model import create_features
 st_autorefresh(interval=30000, key="refresh")
 
 st.title("📊 Crypto Trading Intelligence System")
-
 st.markdown("🟢 LIVE Dashboard (Auto-refresh every 30s)")
 
 # -------------------------
@@ -46,13 +45,10 @@ if coin_df.empty:
     st.stop()
 
 # -------------------------
-# FEATURE ENGINEERING (FULL INDICATORS)
+# FEATURE ENGINEERING
 # -------------------------
 coin_df = create_features(coin_df)
 
-st.write(coin_df.columns)  # DEBUG ONLY
-
-# extra smoothing features
 coin_df["ma7"] = coin_df["price"].rolling(7).mean()
 coin_df["ema7"] = coin_df["price"].ewm(span=7).mean()
 
@@ -86,7 +82,7 @@ st.line_chart(
 )
 
 # =====================================================
-# 📊 TECHNICAL INDICATORS
+# 📊 RSI (SAFE)
 # =====================================================
 st.subheader("RSI (14)")
 
@@ -95,22 +91,41 @@ if "rsi" in coin_df.columns:
         coin_df.set_index("created_at")["rsi"].tail(100)
     )
 else:
-    st.warning("RSI not available - feature missing")
+    st.warning("RSI not available")
 
+# =====================================================
+# 📊 MACD (SAFE FIX)
+# =====================================================
 st.subheader("MACD")
-st.line_chart(
-    coin_df.set_index("created_at")[["macd", "macd_signal"]].tail(100)
-)
 
+if "macd" in coin_df.columns and "macd_signal" in coin_df.columns:
+    st.line_chart(
+        coin_df.set_index("created_at")[["macd", "macd_signal"]].tail(100)
+    )
+else:
+    st.warning("MACD not available")
+
+# =====================================================
+# 📊 BOLLINGER (SAFE FIX)
+# =====================================================
 st.subheader("Bollinger Bands")
-st.line_chart(
-    coin_df.set_index("created_at")[["price", "bb_upper", "bb_lower"]].tail(100)
-)
 
+if all(x in coin_df.columns for x in ["bb_upper", "bb_lower"]):
+    st.line_chart(
+        coin_df.set_index("created_at")[["price", "bb_upper", "bb_lower"]].tail(100)
+    )
+else:
+    st.warning("Bollinger Bands not available")
+
+# =====================================================
+# 📊 EMA TREND
+# =====================================================
 st.subheader("EMA Trend")
-st.line_chart(
-    coin_df.set_index("created_at")[["price", "ema12", "ema26"]].tail(100)
-)
+
+if "ema12" in coin_df.columns and "ema26" in coin_df.columns:
+    st.line_chart(
+        coin_df.set_index("created_at")[["price", "ema12", "ema26"]].tail(100)
+    )
 
 # =====================================================
 # 📊 MULTI-COIN COMPARISON
@@ -135,19 +150,12 @@ if not pivot.empty:
     st.line_chart(normalized.tail(200))
 
 # =====================================================
-# 🧠 ADVANCED PREDICTION LAYER
+# 🧠 PREDICTION LAYER
 # =====================================================
-
 st.subheader("🧠 Prediction Quality Layer")
 
-# -------------------------
-# BASELINE PREDICTION
-# -------------------------
 simple_pred = last_price + coin_df["price"].diff().mean()
 
-# -------------------------
-# MULTI-STEP FORECAST (5 STEP)
-# -------------------------
 def multi_step_forecast(series, steps=5):
     preds = []
     data = series.copy()
@@ -162,38 +170,31 @@ def multi_step_forecast(series, steps=5):
 
 forecast_5 = multi_step_forecast(coin_df["price"], 5)
 
-# -------------------------
-# CONFIDENCE INTERVALS
-# -------------------------
 residuals = coin_df["price"].diff()
 std_error = residuals.std()
 
 upper = simple_pred + (1.96 * std_error)
 lower = simple_pred - (1.96 * std_error)
 
-# -------------------------
-# MODEL CONFIDENCE SCORE
-# -------------------------
 confidence_score = 1 / (std_error + 1e-6)
 confidence_score = min(confidence_score / 100, 1)
 
 # =====================================================
-# 📊 DISPLAY PREDICTION RESULTS
+# 📊 DISPLAY RESULTS
 # =====================================================
 col1, col2, col3 = st.columns(3)
 
-col1.metric("Next Price (Baseline)", round(simple_pred, 2))
-col2.metric("Confidence Score", round(confidence_score, 3))
+col1.metric("Next Price", round(simple_pred, 2))
+col2.metric("Confidence", round(confidence_score, 3))
 col3.metric("Volatility", heat)
 
-st.write("📉 Confidence Interval")
-st.write(f"Lower: {lower:.2f} | Upper: {upper:.2f}")
+st.write(f"Confidence Interval: {lower:.2f} - {upper:.2f}")
 
-st.subheader("🔮 5-Step Forecast")
+st.subheader("Forecast (5-step)")
 st.line_chart(pd.DataFrame(forecast_5, columns=["Forecast"]))
 
 # =====================================================
-# 📋 RAW DATA
+# RAW DATA
 # =====================================================
 st.subheader("Latest Data")
 st.dataframe(df.tail(20))
