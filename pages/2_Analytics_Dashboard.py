@@ -50,6 +50,8 @@ if coin_df.empty:
 # -------------------------
 coin_df = create_features(coin_df)
 
+st.write(coin_df.columns)  # DEBUG ONLY
+
 # extra smoothing features
 coin_df["ma7"] = coin_df["price"].rolling(7).mean()
 coin_df["ema7"] = coin_df["price"].ewm(span=7).mean()
@@ -89,8 +91,13 @@ st.line_chart(
 
 st.subheader("RSI (14)")
 st.line_chart(
-    coin_df.set_index("created_at")["rsi"].tail(100)
-)
+    if "rsi" in coin_df.columns:
+        st.subheader("RSI (14)")
+        st.line_chart(
+            coin_df.set_index("created_at")["rsi"].tail(100)
+        )
+    else:
+         st.warning("RSI not available - feature missing")
 
 st.subheader("MACD")
 st.line_chart(
