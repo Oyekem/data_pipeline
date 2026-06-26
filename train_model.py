@@ -59,7 +59,8 @@ def create_features(data):
 
     data["std5"] = data["price"].rolling(5).std()
 
-    return data.dropna()
+    data = data.dropna(subset=["lag1", "lag2", "lag3"])
+    return data
 
 features = [
     "lag1","lag2","lag3",
