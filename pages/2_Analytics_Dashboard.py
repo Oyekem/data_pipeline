@@ -88,16 +88,14 @@ st.line_chart(
 # =====================================================
 # 📊 TECHNICAL INDICATORS
 # =====================================================
-
 st.subheader("RSI (14)")
-st.line_chart(
-    if "rsi" in coin_df.columns:
-        st.subheader("RSI (14)")
-        st.line_chart(
-            coin_df.set_index("created_at")["rsi"].tail(100)
-        )
-    else:
-         st.warning("RSI not available - feature missing")
+
+if "rsi" in coin_df.columns:
+    st.line_chart(
+        coin_df.set_index("created_at")["rsi"].tail(100)
+    )
+else:
+    st.warning("RSI not available - feature missing")
 
 st.subheader("MACD")
 st.line_chart(
