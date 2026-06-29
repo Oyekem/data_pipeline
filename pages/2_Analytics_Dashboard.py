@@ -6,6 +6,11 @@ from config import engine
 from streamlit_autorefresh import st_autorefresh
 from ml_model import create_features
 
+
+logger.info("Dashboard loaded")
+
+logger.error("Missing RSI column")
+
 # -------------------------
 # LIVE REFRESH SYSTEM
 # -------------------------
