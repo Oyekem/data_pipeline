@@ -1,12 +1,10 @@
+
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DB_URL")
-
-if not DATABASE_URL:
-    raise ValueError("DB_URL is missing from environment variables")
-
-engine = create_engine(DATABASE_URL)
+engine = create_engine(os.getenv("DB_URL"))
+MODEL_DIR = os.getenv("MODEL_DIR", "models")
+REFRESH_INTERVAL = int(os.getenv("REFRESH_INTERVAL", 30))
