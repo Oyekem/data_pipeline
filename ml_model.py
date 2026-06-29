@@ -16,14 +16,28 @@ def backtest(model, df):
     if len(df) < 50:
         return 0, 0
 
-    features = ["lag1", "lag2", "lag3", "ma5", "std5"]
+    features = [
+    "lag1",
+    "lag2",
+    "lag3",
+    "ma5",
+    "ma10",
+    "ema12",
+    "ema26",
+    "macd",
+    "macd_signal",
+    "bb_upper",
+    "bb_lower",
+    "rsi",
+    "momentum",
+    "std5"]
 
     split = int(len(df) * 0.8)
 
     train = df.iloc[:split]
     test = df.iloc[split:]
 
-    # ❌ DO NOT retrain model here
+    # DO NOT retrain model here
     preds = model.predict(test[features])
 
     mae = mean_absolute_error(test["price"], preds)
@@ -87,7 +101,14 @@ def create_features(df):
     # -----------------------
     # MOMENTUM
     # -----------------------
-    df["momentum"] = df["price"] - df["price"].shift(10)
+    df["momentum"] = df["price"] - df["price"].shift(10) 
+
+
+    # -----------------------
+    # VOLATILITY
+    # -----------------------
+    df["std5"] = df["price"].rolling(5).std()
+
 
     # -----------------------
     # CLEAN
@@ -102,7 +123,21 @@ def create_features(df):
 def train_model(df):
     df = create_features(df)
 
-    X = df[["lag1", "lag2", "lag3", "ma5", "std5"]]
+    X = df[[
+    "lag1",
+    "lag2",
+    "lag3",
+    "ma5",
+    "ma10",
+    "ema12",
+    "ema26",
+    "macd",
+    "macd_signal",
+    "bb_upper",
+    "bb_lower",
+    "rsi",
+    "momentum",
+    "std5"]]
     y = df["price"]
 
     model = RandomForestRegressor(n_estimators=200, random_state=42)
@@ -135,7 +170,17 @@ def predict_next(model, df):
         latest["lag2"],
         latest["lag3"],
         latest["ma5"],
-        latest["std5"]
-    ]])
+        latest["std5"],
+        latest["ma5"],
+        latest["ma10"],
+        latest["ema12"],
+        latest["ema26"],
+        latest["macd"],
+        latest["macd_signal"],
+        latest["bb_upper"],
+        latest["bb_lower"],
+        latest["rsi"],
+        latest["momentum"],
+        latest["std5"]])
 
     return model.predict(X_input)[0]
