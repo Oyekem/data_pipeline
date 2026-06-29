@@ -11,8 +11,8 @@ from ml_model import create_features
 # -------------------------
 st_autorefresh(interval=30000, key="refresh")
 
-st.title("📊 Crypto Trading Intelligence System")
-st.markdown("🟢 LIVE Dashboard (Auto-refresh every 30s)")
+st.title("Crypto Trading Intelligence System")
+st.markdown("LIVE Dashboard (Auto-refresh every 30s)")
 
 # -------------------------
 # LOAD DATA
@@ -30,6 +30,28 @@ if df.empty:
 
 df["created_at"] = pd.to_datetime(df["created_at"])
 df["price"] = pd.to_numeric(df["price"], errors="coerce")
+
+# =====================================================
+# DATE RANGE FILTER (ADDED HERE)
+# =====================================================
+min_date = df["created_at"].min().date()
+max_date = df["created_at"].max().date()
+
+start_date, end_date = st.date_input(
+    "Select Date Range",
+    value=(min_date, max_date),
+    min_value=min_date,
+    max_value=max_date
+)
+
+df = df[
+    (df["created_at"].dt.date >= start_date) &
+    (df["created_at"].dt.date <= end_date)
+]
+
+if df.empty:
+    st.warning("No data in selected date range")
+    st.stop()
 
 # -------------------------
 # COIN SELECTION
@@ -73,31 +95,27 @@ col1.metric("Price", round(last_price, 2))
 col2.metric("Volatility", round(volatility, 6))
 col3.metric("Market Heat", heat)
 
-# =====================================================
-# 📈 PRICE + MOVING AVERAGES
-# =====================================================
-st.subheader("📈 Price Trend")
+# -------------------------
+# PRICE TREND
+# -------------------------
+st.subheader("Price Trend")
 st.line_chart(
     coin_df.set_index("created_at")[["price", "ma7", "ema7"]].tail(100)
 )
 
-# =====================================================
-# 📊 RSI (SAFE)
-# =====================================================
+# -------------------------
+# RSI (SAFE)
+# -------------------------
 st.subheader("RSI (14)")
-
 if "rsi" in coin_df.columns:
-    st.line_chart(
-        coin_df.set_index("created_at")["rsi"].tail(100)
-    )
+    st.line_chart(coin_df.set_index("created_at")["rsi"].tail(100))
 else:
     st.warning("RSI not available")
 
-# =====================================================
-# 📊 MACD (SAFE FIX)
-# =====================================================
+# -------------------------
+# MACD (SAFE)
+# -------------------------
 st.subheader("MACD")
-
 if "macd" in coin_df.columns and "macd_signal" in coin_df.columns:
     st.line_chart(
         coin_df.set_index("created_at")[["macd", "macd_signal"]].tail(100)
@@ -105,11 +123,10 @@ if "macd" in coin_df.columns and "macd_signal" in coin_df.columns:
 else:
     st.warning("MACD not available")
 
-# =====================================================
-# 📊 BOLLINGER (SAFE FIX)
-# =====================================================
+# -------------------------
+# BOLLINGER
+# -------------------------
 st.subheader("Bollinger Bands")
-
 if all(x in coin_df.columns for x in ["bb_upper", "bb_lower"]):
     st.line_chart(
         coin_df.set_index("created_at")[["price", "bb_upper", "bb_lower"]].tail(100)
@@ -117,19 +134,18 @@ if all(x in coin_df.columns for x in ["bb_upper", "bb_lower"]):
 else:
     st.warning("Bollinger Bands not available")
 
-# =====================================================
-# 📊 EMA TREND
-# =====================================================
+# -------------------------
+# EMA TREND
+# -------------------------
 st.subheader("EMA Trend")
-
 if "ema12" in coin_df.columns and "ema26" in coin_df.columns:
     st.line_chart(
         coin_df.set_index("created_at")[["price", "ema12", "ema26"]].tail(100)
     )
 
-# =====================================================
-# 📊 MULTI-COIN COMPARISON
-# =====================================================
+# -------------------------
+# MULTI-COIN COMPARISON
+# -------------------------
 selected_coins = st.multiselect(
     "Compare coins",
     coins,
@@ -146,13 +162,13 @@ pivot = compare_df.pivot_table(
 
 if not pivot.empty:
     normalized = pivot / pivot.iloc[0] * 100
-    st.subheader("📊 Multi-Coin Performance (Normalized)")
+    st.subheader("Multi-Coin Performance (Normalized)")
     st.line_chart(normalized.tail(200))
 
-# =====================================================
-# 🧠 PREDICTION LAYER
-# =====================================================
-st.subheader("🧠 Prediction Quality Layer")
+# -------------------------
+# PREDICTION LAYER
+# -------------------------
+st.subheader(" Prediction Quality Layer")
 
 simple_pred = last_price + coin_df["price"].diff().mean()
 
@@ -179,9 +195,9 @@ lower = simple_pred - (1.96 * std_error)
 confidence_score = 1 / (std_error + 1e-6)
 confidence_score = min(confidence_score / 100, 1)
 
-# =====================================================
-# 📊 DISPLAY RESULTS
-# =====================================================
+# -------------------------
+# DISPLAY
+# -------------------------
 col1, col2, col3 = st.columns(3)
 
 col1.metric("Next Price", round(simple_pred, 2))
@@ -193,8 +209,8 @@ st.write(f"Confidence Interval: {lower:.2f} - {upper:.2f}")
 st.subheader("Forecast (5-step)")
 st.line_chart(pd.DataFrame(forecast_5, columns=["Forecast"]))
 
-# =====================================================
+# -------------------------
 # RAW DATA
-# =====================================================
+# -------------------------
 st.subheader("Latest Data")
 st.dataframe(df.tail(20))
