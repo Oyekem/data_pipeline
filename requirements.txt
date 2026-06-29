@@ -4,3 +4,9 @@ psycopg2-binary
 sqlalchemy
 python-dotenv
 streamlit
+numpy
+scikit-learn
+xgboost
+sqlalchemy
+joblib
+streamlit-autorefresh
