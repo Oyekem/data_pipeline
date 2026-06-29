@@ -6,7 +6,17 @@ from api import fetch_crypto
 from validation import validate_data
 from db import save_to_db, save_pipeline_log
 from config import engine
-from logger import logger
+
+from utils.logger import logger
+
+logger.info("Pipeline started")
+
+try:
+    # fetch data
+    logger.info("Data fetched successfully")
+except Exception as e:
+    logger.error(f"Pipeline failed: {e}")
+
 
 
 # -------------------------
