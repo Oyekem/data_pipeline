@@ -1,4 +1,5 @@
 import streamlit as st
+from utils.logger import logger
 
 st.set_page_config(
     page_title="Crypto Intelligence System",
