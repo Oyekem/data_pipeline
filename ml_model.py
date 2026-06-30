@@ -1,14 +1,13 @@
+Replace your top section with this:
+
 import numpy as np
 import pandas as pd
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 from utils.logger import logger
 
-logger.info("Feature engineering started")
-logger.info("Model training started")
+logger.info("Feature engineering module loaded")
 
-except Exception as e:
-    logger.error(f"Training failed: {e}")
 # =====================================================
 # FEATURE ENGINEERING
 # =====================================================
