@@ -1,6 +1,6 @@
 import time
 import requests
-from logger import logger
+from utils.logger import logger
 
 def fetch_crypto():
     url = "https://api.coingecko.com/api/v3/coins/markets"
