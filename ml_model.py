@@ -1,12 +1,13 @@
-Replace your top section with this:
-
 import numpy as np
 import pandas as pd
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 from utils.logger import logger
 
-logger.info("Feature engineering module loaded")
+try:
+    logger.info("Feature engineering module loaded")
+except:
+    pass
 
 # =====================================================
 # FEATURE ENGINEERING
@@ -52,7 +53,10 @@ def create_features(df):
     # VOLATILITY
     df["std5"] = df["price"].rolling(5).std()
 
-    return df.dropna()
+    df = df.dropna()
+
+    if len(df) < 20:
+        return pd.DataFrame()
 
 
 # =====================================================
