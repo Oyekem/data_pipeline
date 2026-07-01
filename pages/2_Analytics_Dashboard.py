@@ -1,21 +1,16 @@
-
 import streamlit as st
 import pandas as pd
 import numpy as np
 
-print("===== DASHBOARD STARTED =====")
-
 from utils.logger import logger
-
-print("Logger imported:", logger)
-
-logger.info("Dashboard loaded")
-
 from config import engine
 from streamlit_autorefresh import st_autorefresh
 from ml_model import create_features
 
-
+# -------------------------
+# LOGGING
+# -------------------------
+logger.info("Dashboard loaded")
 
 # -------------------------
 # LIVE REFRESH SYSTEM
@@ -43,7 +38,7 @@ df["created_at"] = pd.to_datetime(df["created_at"])
 df["price"] = pd.to_numeric(df["price"], errors="coerce")
 
 # =====================================================
-# DATE RANGE FILTER (ADDED HERE)
+# DATE RANGE FILTER
 # =====================================================
 min_date = df["created_at"].min().date()
 max_date = df["created_at"].max().date()
@@ -115,7 +110,7 @@ st.line_chart(
 )
 
 # -------------------------
-# RSI (SAFE)
+# RSI
 # -------------------------
 st.subheader("RSI (14)")
 if "rsi" in coin_df.columns:
@@ -124,7 +119,7 @@ else:
     st.warning("RSI not available")
 
 # -------------------------
-# MACD (SAFE)
+# MACD
 # -------------------------
 st.subheader("MACD")
 if "macd" in coin_df.columns and "macd_signal" in coin_df.columns:
@@ -177,9 +172,9 @@ if not pivot.empty:
     st.line_chart(normalized.tail(200))
 
 # -------------------------
-# PREDICTION LAYER
+# FORECAST
 # -------------------------
-st.subheader(" Prediction Quality Layer")
+st.subheader("Prediction Quality Layer")
 
 simple_pred = last_price + coin_df["price"].diff().mean()
 
