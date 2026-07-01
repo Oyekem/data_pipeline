@@ -3,6 +3,8 @@ import joblib
 import pandas as pd
 import numpy as np
 
+from utils.logger import logger
+
 from sqlalchemy import text
 from config import engine
 from ml_model import create_features, backtest
