@@ -7,17 +7,14 @@ from config import engine
 from streamlit_autorefresh import st_autorefresh
 from ml_model import create_features
 
-# -------------------------
-# LOGGING
-# -------------------------
-logger.info("Dashboard loaded")
+logger.info("Dashboard started")
 
 # -------------------------
-# LIVE REFRESH SYSTEM
+# AUTO REFRESH
 # -------------------------
 st_autorefresh(interval=30000, key="refresh")
 
-st.title("Crypto Trading Intelligence System")
+st.title("📊 Crypto Trading Intelligence System")
 st.markdown("LIVE Dashboard (Auto-refresh every 30s)")
 
 # -------------------------
@@ -31,15 +28,15 @@ def load_data():
 df = load_data()
 
 if df.empty:
-    st.warning("No data yet")
+    st.warning("No data available")
     st.stop()
 
 df["created_at"] = pd.to_datetime(df["created_at"])
 df["price"] = pd.to_numeric(df["price"], errors="coerce")
 
-# =====================================================
-# DATE RANGE FILTER
-# =====================================================
+# -------------------------
+# DATE FILTER
+# -------------------------
 min_date = df["created_at"].min().date()
 max_date = df["created_at"].max().date()
 
@@ -56,11 +53,11 @@ df = df[
 ]
 
 if df.empty:
-    st.warning("No data in selected date range")
+    st.warning("No data in selected range")
     st.stop()
 
 # -------------------------
-# COIN SELECTION
+# COIN FILTER
 # -------------------------
 coins = df["coin"].dropna().unique()
 selected_coin = st.selectbox("Select Coin", coins)
@@ -73,22 +70,20 @@ if coin_df.empty:
     st.stop()
 
 # -------------------------
-# FEATURE ENGINEERING
+# FEATURES
 # -------------------------
 coin_df = create_features(coin_df)
 
 coin_df["ma7"] = coin_df["price"].rolling(7).mean()
 coin_df["ema7"] = coin_df["price"].ewm(span=7).mean()
-
 coin_df = coin_df.dropna()
 
 # -------------------------
-# CORE METRICS
+# METRICS
 # -------------------------
 last_price = coin_df["price"].iloc[-1]
 
-coin_df["returns"] = coin_df["price"].pct_change()
-volatility = coin_df["returns"].std()
+volatility = coin_df["price"].pct_change().std()
 
 heat = (
     "🟢 Low" if volatility < 0.01 else
@@ -102,61 +97,31 @@ col2.metric("Volatility", round(volatility, 6))
 col3.metric("Market Heat", heat)
 
 # -------------------------
-# PRICE TREND
+# CHARTS
 # -------------------------
 st.subheader("Price Trend")
-st.line_chart(
-    coin_df.set_index("created_at")[["price", "ma7", "ema7"]].tail(100)
-)
+st.line_chart(coin_df.set_index("created_at")[["price", "ma7", "ema7"]].tail(100))
 
-# -------------------------
-# RSI
-# -------------------------
-st.subheader("RSI (14)")
+st.subheader("RSI")
 if "rsi" in coin_df.columns:
     st.line_chart(coin_df.set_index("created_at")["rsi"].tail(100))
-else:
-    st.warning("RSI not available")
 
-# -------------------------
-# MACD
-# -------------------------
 st.subheader("MACD")
-if "macd" in coin_df.columns and "macd_signal" in coin_df.columns:
-    st.line_chart(
-        coin_df.set_index("created_at")[["macd", "macd_signal"]].tail(100)
-    )
-else:
-    st.warning("MACD not available")
+if {"macd", "macd_signal"}.issubset(coin_df.columns):
+    st.line_chart(coin_df.set_index("created_at")[["macd", "macd_signal"]].tail(100))
 
-# -------------------------
-# BOLLINGER
-# -------------------------
 st.subheader("Bollinger Bands")
-if all(x in coin_df.columns for x in ["bb_upper", "bb_lower"]):
-    st.line_chart(
-        coin_df.set_index("created_at")[["price", "bb_upper", "bb_lower"]].tail(100)
-    )
-else:
-    st.warning("Bollinger Bands not available")
+if {"bb_upper", "bb_lower"}.issubset(coin_df.columns):
+    st.line_chart(coin_df.set_index("created_at")[["price", "bb_upper", "bb_lower"]].tail(100))
 
-# -------------------------
-# EMA TREND
-# -------------------------
 st.subheader("EMA Trend")
-if "ema12" in coin_df.columns and "ema26" in coin_df.columns:
-    st.line_chart(
-        coin_df.set_index("created_at")[["price", "ema12", "ema26"]].tail(100)
-    )
+if {"ema12", "ema26"}.issubset(coin_df.columns):
+    st.line_chart(coin_df.set_index("created_at")[["price", "ema12", "ema26"]].tail(100))
 
 # -------------------------
-# MULTI-COIN COMPARISON
+# MULTI-COIN
 # -------------------------
-selected_coins = st.multiselect(
-    "Compare coins",
-    coins,
-    default=list(coins[:2])
-)
+selected_coins = st.multiselect("Compare coins", coins, default=list(coins[:2]))
 
 compare_df = df[df["coin"].isin(selected_coins)]
 
@@ -168,52 +133,8 @@ pivot = compare_df.pivot_table(
 
 if not pivot.empty:
     normalized = pivot / pivot.iloc[0] * 100
-    st.subheader("Multi-Coin Performance (Normalized)")
+    st.subheader("Multi-Coin Performance")
     st.line_chart(normalized.tail(200))
-
-# -------------------------
-# FORECAST
-# -------------------------
-st.subheader("Prediction Quality Layer")
-
-simple_pred = last_price + coin_df["price"].diff().mean()
-
-def multi_step_forecast(series, steps=5):
-    preds = []
-    data = series.copy()
-
-    for _ in range(steps):
-        diff = data.diff().mean()
-        next_val = data.iloc[-1] + diff
-        preds.append(next_val)
-        data = pd.concat([data, pd.Series([next_val])], ignore_index=True)
-
-    return preds
-
-forecast_5 = multi_step_forecast(coin_df["price"], 5)
-
-residuals = coin_df["price"].diff()
-std_error = residuals.std()
-
-upper = simple_pred + (1.96 * std_error)
-lower = simple_pred - (1.96 * std_error)
-
-confidence_score = 1 / (std_error + 1e-6)
-confidence_score = min(confidence_score / 100, 1)
-
-# -------------------------
-# DISPLAY
-# -------------------------
-col1, col2, col3 = st.columns(3)
-
-col1.metric("Next Price", round(simple_pred, 2))
-col2.metric("Confidence", round(confidence_score, 3))
-col3.metric("Volatility", heat)
-
-st.write(f"Confidence Interval: {lower:.2f} - {upper:.2f}")
-
-st.subheader("Forecast (5-step)")
-st.line_chart(pd.DataFrame(forecast_5, columns=["Forecast"]))
 
 # -------------------------
 # RAW DATA
