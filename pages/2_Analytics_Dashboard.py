@@ -1,15 +1,21 @@
+
 import streamlit as st
 import pandas as pd
 import numpy as np
+
+print("===== DASHBOARD STARTED =====")
+
+from utils.logger import logger
+
+print("Logger imported:", logger)
+
+logger.info("Dashboard loaded")
 
 from config import engine
 from streamlit_autorefresh import st_autorefresh
 from ml_model import create_features
 
 
-logger.info("Dashboard loaded")
-
-logger.error("Missing RSI column")
 
 # -------------------------
 # LIVE REFRESH SYSTEM
