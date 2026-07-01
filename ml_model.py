@@ -13,51 +13,41 @@ except:
 # FEATURE ENGINEERING
 # =====================================================
 def create_features(df):
+    if df is None or len(df) == 0:
+        return pd.DataFrame()
+
     df = df.copy()
 
-    # LAG FEATURES
     df["lag1"] = df["price"].shift(1)
     df["lag2"] = df["price"].shift(2)
     df["lag3"] = df["price"].shift(3)
 
-    # MOVING AVERAGES
     df["ma5"] = df["price"].rolling(5).mean()
     df["ma10"] = df["price"].rolling(10).mean()
 
-    # EMA
     df["ema12"] = df["price"].ewm(span=12).mean()
     df["ema26"] = df["price"].ewm(span=26).mean()
 
-    # MACD
     df["macd"] = df["ema12"] - df["ema26"]
     df["macd_signal"] = df["macd"].ewm(span=9).mean()
 
-    # BOLLINGER BANDS
     df["bb_mid"] = df["price"].rolling(20).mean()
     df["bb_std"] = df["price"].rolling(20).std()
 
     df["bb_upper"] = df["bb_mid"] + 2 * df["bb_std"]
     df["bb_lower"] = df["bb_mid"] - 2 * df["bb_std"]
 
-    # RSI
     delta = df["price"].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(14).mean()
+    gain = delta.where(delta > 0, 0).rolling(14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
 
     rs = gain / (loss + 1e-9)
     df["rsi"] = 100 - (100 / (1 + rs))
 
-    # MOMENTUM
     df["momentum"] = df["price"] - df["price"].shift(10)
-
-    # VOLATILITY
     df["std5"] = df["price"].rolling(5).std()
 
-    df = df.dropna()
-
-    if len(df) < 20:
-        return pd.DataFrame()
-
+    return df.dropna()
 
 # =====================================================
 # FEATURE LIST (SINGLE SOURCE OF TRUTH)
